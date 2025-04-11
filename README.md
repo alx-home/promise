@@ -1,2 +1,4 @@
+[![Build](https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg)](https://github.com/alx-home/promise/actions/workflows/build.yml) 
 # promise
-C++ Promise coroutine : js like style
+
+Json like promise style
