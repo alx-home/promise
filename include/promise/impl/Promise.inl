@@ -43,105 +43,34 @@ SOFTWARE.
 #include <variant>
 
 template <class T>
-struct objcopy_helper;
+struct exception_helper;
 
-template <class T>
-struct objcopy_helper {
-   using object_ptr_t = void;
-};
-
-// Create an object at runtime by calling the copy constructor of another virtual object (Reverse engineering of MSVC22 must not works if compiled with other compiler)
+// Add a cast operator to an exception pointer (Reverse engineering of MSVC22 must not works if compiled with other compiler)
 template <class T>
    requires(std::is_class_v<T>)
-struct objcopy_helper<T> {
-   using constructor_t = T& (*)(std::byte*, T const&);
-   using destructor_t  = void (*)(T*);
+struct exception_wrapper_t : std::exception_ptr {
+   using std::exception_ptr::exception_ptr;
+   using std::exception_ptr::operator=;
 
-   struct object_ptr_t : private std::vector<std::byte>
-      , public std::unique_ptr<T, destructor_t> {
-
-      object_ptr_t(destructor_t destructor = nullptr)
-         : std::unique_ptr<T, destructor_t>(nullptr, destructor) {};
-
-      object_ptr_t(object_ptr_t const&)            = delete;
-      object_ptr_t& operator=(object_ptr_t const&) = delete;
-
-      object_ptr_t(object_ptr_t&& e) noexcept
-         : std::vector<std::byte>(std::move(e))
-         , std::unique_ptr<T, destructor_t>(std::move(e)) {
-      }
-
-      object_ptr_t& operator=(object_ptr_t&& e) {
-         std::vector<std::byte>::operator=(std::move(e));
-         std::unique_ptr<T, destructor_t>::operator=(std::move(e));
-
-         return *this;
-      }
-
-      friend objcopy_helper;
-   };
-   static object_ptr_t copy(T const& from) {
+   explicit(false) operator T&() {
       static_assert(_MSC_VER == 1943, "Only tested on msvc 2022, with other compiler use it at your own risk!");
 
-      std::span from_data{reinterpret_cast<std::byte const*>(&from) - 16, 16};
+      assert(*this);
 
-      std::byte* cvtable_ptr;
-      std::ranges::copy(from_data.subspan(0, 8), reinterpret_cast<std::byte*>(&cvtable_ptr));
+      struct exception_ptr {
+         std::byte* data1_;
+         std::byte* data2_;
+      };
+      static_assert(sizeof(exception_ptr) == 8 * 2);
 
-      std::byte* base_addr;
-      std::ranges::copy(from_data.subspan(8, 8), reinterpret_cast<std::byte*>(&base_addr));
+      exception_ptr data;
+      std::ranges::copy_n(reinterpret_cast<std::byte*>(this), sizeof(exception_ptr), reinterpret_cast<std::byte*>(&data));
 
-      struct Entry {
-         uint32_t flags;
-         uint32_t table_off;
-         uint32_t magic;
-         uint32_t virtual_type;
-         uint32_t flags2;
-         uint32_t size;
-         uint32_t constr_off;
-         uint32_t magic2;
-      } entry;
-      static_assert(sizeof(entry) == 0x20);
+      std::byte* addr;
+      std::ranges::copy_n(reinterpret_cast<std::byte*>(data.data2_) + 0x38, sizeof(addr), reinterpret_cast<std::byte*>(&addr));
 
-      std::ranges::copy_n(cvtable_ptr, sizeof(entry), reinterpret_cast<std::byte*>(&entry));
-      assert(!entry.magic && !entry.magic2);
-      auto const constructor = std::bit_cast<constructor_t>(base_addr + entry.constr_off);
-      auto const obj_size    = entry.size;
-
-      std::size_t size = 1;
-      while (!entry.magic) {
-         assert(!entry.magic2);
-
-         ++size;
-         cvtable_ptr += 0x20;
-         std::ranges::copy_n(cvtable_ptr, 0x20, reinterpret_cast<std::byte*>(&entry));
-      }
-
-      uint32_t num_entries;
-      std::ranges::copy_n(cvtable_ptr, 0x4, reinterpret_cast<std::byte*>(&num_entries));
-      assert(num_entries == size);
-      cvtable_ptr += (num_entries + 1) * 0x4;
-
-      auto cvtable_pos = (std::bit_cast<std::ptrdiff_t>(cvtable_ptr) + 0x7) & ~7ull;
-      cvtable_ptr      = std::bit_cast<std::byte*>(cvtable_pos);
-
-      struct {
-         uint32_t magic;
-         uint32_t destr_off;
-      } last;
-      std::ranges::copy_n(cvtable_ptr, 0x8, reinterpret_cast<std::byte*>(&last));
-      assert(!last.magic);
-
-      auto const destructor = std::bit_cast<destructor_t>(base_addr + last.destr_off);
-
-      object_ptr_t ptr{destructor};
-      ptr.resize(obj_size);
-
-      std::ranges::copy_n(reinterpret_cast<std::byte const*>(&from), 8, ptr.data());
-      auto this_ = ptr.data();
-      ptr.reset(&constructor(this_, from));
-
-      return ptr;
+      auto ptr = reinterpret_cast<T*>(addr);
+      return *ptr;
    }
 };
 
@@ -694,66 +623,37 @@ public:
 
       return make_promise([func = std::forward<FUN>(func)](std::remove_reference_t<Self>* self, Args&&... args) -> return_t {
          using exception_t = std::remove_cvref_t<Exception>;
+         exception_wrapper_t<exception_t> exc{};
 
-         struct exception_ptr_wrapper {
-            constexpr exception_ptr_wrapper() = default;
-            constexpr explicit exception_ptr_wrapper(std::exception_ptr exc)
-               : obj_(exc) {}
-
-            constexpr std::exception_ptr const& operator*() const {
-               return obj_;
-            }
-
-            constexpr explicit operator bool() const {
-               return obj_ != nullptr;
-            }
-
-            std::exception_ptr obj_{nullptr};
-         };
-
-         using exception_ptr_t = std::conditional_t<is_exc_ptr, exception_ptr_wrapper, typename objcopy_helper<exception_t>::object_ptr_t>;
-         exception_ptr_t exc{};
-
-         using destructor_t = void (*)(exception_t*);
-         std::vector<std::byte>                     data;
-         std::unique_ptr<exception_t, destructor_t> casted_exc{nullptr, nullptr};
-
-         if constexpr (is_exc_ptr) {
-            try {
-               if constexpr (std::is_void_v<T>) {
-                  co_await *self;
-                  if constexpr (std::is_void_v<T2>) {
-                     co_return;
-                  } else {
-                     co_return std::optional<T2>{};
-                  }
+         try {
+            if constexpr (std::is_void_v<T>) {
+               co_await *self;
+               if constexpr (std::is_void_v<T2>) {
+                  co_return;
                } else {
-                  co_return co_await *self;
+                  co_return std::optional<T2>{};
                }
-            } catch (...) {
-               exc = exception_ptr_wrapper{std::current_exception()};
+            } else {
+               co_return co_await *self;
             }
-         } else {
-            try {
-               if constexpr (std::is_void_v<T>) {
-                  co_await *self;
-                  if constexpr (std::is_void_v<T2>) {
-                     co_return;
-                  } else {
-                     co_return std::optional<T2>{};
-                  }
-               } else {
-                  co_return co_await *self;
-               }
-            } catch (std::remove_cvref_t<Exception> const& e) {
-               exc = objcopy_helper<exception_t>::copy(e);
+         } catch (std::remove_cvref_t<Exception> const& e) {
+            if constexpr (!is_exc_ptr) {
+               exc = std::current_exception();
+            } else {
+               throw;
+            }
+         } catch (...) {
+            if constexpr (is_exc_ptr) {
+               exc = std::current_exception();
+            } else {
+               throw;
             }
          }
 
          assert(exc);
 
          if constexpr (std::is_void_v<T2>) {
-            co_await make_promise(std::move(func), *exc, std::forward<Args>(args)...);
+            co_await make_promise(std::move(func), exc, std::forward<Args>(args)...);
 
             if constexpr (std::is_void_v<T>) {
                co_return;
@@ -761,7 +661,7 @@ public:
                co_return std::optional<T>{};
             }
          } else {
-            co_return co_await make_promise(std::move(func), *exc, std::forward<Args>(args)...);
+            co_return co_await make_promise(std::move(func), exc, std::forward<Args>(args)...);
          }
       },
                           self_,
