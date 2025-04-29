@@ -187,7 +187,7 @@ public:
       return self.resolver_->value_.value();
    }
 
-   template <class SELF> bool HasValue(this SELF&& self) {
+   template <class SELF> bool IsResolved(this SELF&& self) {
       std::shared_lock lock{*self.mutex_};
       assert(self.resolver_);
       return self.resolver_->value_.has_value();
@@ -221,11 +221,13 @@ struct Refcount {
 };
 #endif  // PROMISE_MEMCHECK
 
-template <class T, bool WITH_RESOLVER> struct Handle {
+template <class T, bool WITH_RESOLVER> struct Handle : public ValuePromise<T, std::is_void_v<T>> {
 protected:
    struct PromiseType;
-   using handle_type             = std::coroutine_handle<PromiseType>;
-   using Promise                 = Promise<T, WITH_RESOLVER>;
+   using handle_type  = std::coroutine_handle<PromiseType>;
+   using Promise      = Promise<T, WITH_RESOLVER>;
+   using ValuePromise = ValuePromise<T, std::is_void_v<T>>;
+
    static constexpr bool IS_VOID = WITH_RESOLVER || std::is_void_v<T>;
 
    struct VoidPromiseType {
@@ -266,9 +268,7 @@ protected:
       final_suspend_t final_suspend() noexcept {
          auto ptr               = std::move(this->parent_->self_owned_);
          this->parent_->handle_ = nullptr;
-
-         this->parent_->ResumeAwaiters();
-         ptr = nullptr;
+         ptr                    = nullptr;
          return {};
       }
       void unhandled_exception() { this->parent_->unhandled_exception(); }
@@ -310,7 +310,7 @@ public:
    Promise& Detach() && {
       assert(!self_owned_);
 
-      if (this->handle_) {
+      if (!ValuePromise::IsResolved()) {
          auto  ptr          = std::unique_ptr<Promise>(new Promise(static_cast<Promise&&>(*this)));
          auto& result       = *ptr;
          result.self_owned_ = std::move(ptr);
@@ -334,8 +334,11 @@ protected:
    handle_type                                 handle_{nullptr};
    std::unique_ptr<Promise>                    self_owned_{nullptr};
    std::unique_ptr<Resolver<T, WITH_RESOLVER>> resolver_{nullptr};
+   // unique_ptr for move operation
+   std::unique_ptr<std::shared_mutex> mutex_{std::make_unique<std::shared_mutex>()};
 
    template <class, bool> friend struct Then;
+   friend ValuePromise;
 };
 
 struct Function {
@@ -345,14 +348,13 @@ struct Function {
 template <class T, bool WITH_RESOLVER>
 struct Promise
    : Handle<T, WITH_RESOLVER>
-   , ValuePromise<T, std::is_void_v<T>>
 #ifdef PROMISE_MEMCHECK
    , Refcount
 #endif  // PROMISE_MEMCHECK
 {
+   using ValuePromise = Handle<T, WITH_RESOLVER>::ValuePromise;
    using handle_type  = Handle<T, WITH_RESOLVER>::handle_type;
    using promise_type = Handle<T, WITH_RESOLVER>::PromiseType;
-   using ValuePromise = ValuePromise<T, std::is_void_v<T>>;
 
    static constexpr bool IS_VOID = std::is_void_v<T>;
 
@@ -374,7 +376,7 @@ public:
    Promise operator=(Promise const&)          = delete;
 
    auto const& GetException() {
-      std::shared_lock lock{*mutex_};
+      std::shared_lock lock{*this->mutex_};
       assert(this->resolver_);
       return this->resolver_->exception_;
    }
@@ -384,16 +386,12 @@ public:
       std::shared_lock lock{*this->mutex_};
 
       if constexpr (!WITH_RESOLVER) {
-         if constexpr (IS_VOID) {
-            assert(this->IsResolved());
-         } else {
-            assert(this->HasValue());
-         }
+         assert(this->IsResolved());
       }
    }
 
    bool Await(std::coroutine_handle<> h) {
-      std::unique_lock lock{*mutex_, std::defer_lock};
+      std::unique_lock lock{*this->mutex_, std::defer_lock};
       if (!lock.try_lock()) {  // @todo correctly...
          // awaiter resume in progress
          return false;
@@ -408,12 +406,7 @@ public:
          return true;
       }
 
-      if constexpr (IS_VOID) {
-         std::shared_lock lock{*this->mutex_};
-         return this->IsResolved();
-      } else {
-         return this->HasValue();
-      }
+      return this->IsResolved();
    }
 
    bool await_ready() {
@@ -455,7 +448,7 @@ public:
          && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
       )
    void ReturnImpl(FROM&&... value) {
-      std::lock_guard lock{*mutex_};
+      std::lock_guard lock{*this->mutex_};
 
       if constexpr (!WITH_RESOLVER) {
          if constexpr (IS_VOID) {
@@ -469,7 +462,7 @@ public:
    }
 
    void unhandled_exception() {
-      std::lock_guard lock{*mutex_};
+      std::lock_guard lock{*this->mutex_};
       assert(this->resolver_);
       this->resolver_->exception_ = std::current_exception();
    }
@@ -478,7 +471,7 @@ public:
       std::vector<std::coroutine_handle<>> awaiters{};
 
       {
-         std::lock_guard lock{*mutex_};
+         std::lock_guard lock{*this->mutex_};
 
          awaiters_.swap(awaiters);
          assert(!awaiters_.size());
@@ -661,11 +654,8 @@ public:
 private:
    std::unique_ptr<Function>            function_{nullptr};
    std::vector<std::coroutine_handle<>> awaiters_{};
-   // unique_ptr for move operation
-   std::unique_ptr<std::shared_mutex> mutex_{std::make_unique<std::shared_mutex>()};
 
    template <class, bool> friend struct Promise;
-   friend ValuePromise;
    friend Handle<T, WITH_RESOLVER>;
    template <bool> friend struct AwaitTransform;
 };
