@@ -31,6 +31,7 @@ SOFTWARE.
 #include <coroutine>
 #include <exception>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -114,12 +115,8 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
       assert(!exception_);
       value_ = std::forward<TT>(value);
 
-      if constexpr (WITH_RESOLVER) {
-         assert(promise_);
-         if (promise_->Done()) {
-            promise_->ResumeAwaiters();
-         }
-      }
+      assert(promise_);
+      promise_->OnResolved();
    }
 
    void Reject(std::exception_ptr exception) {
@@ -127,12 +124,8 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
       assert(!exception_);
       exception_ = exception;
 
-      if constexpr (WITH_RESOLVER) {
-         assert(promise_);
-         if (promise_->Done()) {
-            promise_->ResumeAwaiters();
-         }
-      }
+      assert(promise_);
+      promise_->OnResolved();
    }
 };
 
@@ -153,12 +146,8 @@ template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
       assert(!exception_);
       resolved_ = true;
 
-      if constexpr (WITH_RESOLVER) {
-         assert(promise_);
-         if (promise_->Done()) {
-            promise_->ResumeAwaiters();
-         }
-      }
+      assert(promise_);
+      promise_->OnResolved();
    }
 
    void Reject(std::exception_ptr exception) {
@@ -166,14 +155,14 @@ template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
       assert(!exception_);
       exception_ = exception;
 
-      if constexpr (WITH_RESOLVER) {
-         assert(promise_);
-         if (promise_->Done()) {
-            promise_->ResumeAwaiters();
-         }
-      }
+      assert(promise_);
+      promise_->OnResolved();
    }
 };
+
+using Lock = std::variant<
+   std::reference_wrapper<std::shared_lock<std::shared_mutex>>,
+   std::reference_wrapper<std::unique_lock<std::shared_mutex>>>;
 
 template <class T, bool VOID_TYPE> struct ValuePromise {
 protected:
@@ -187,8 +176,7 @@ public:
       return self.resolver_->value_.value();
    }
 
-   template <class SELF> bool IsResolved(this SELF&& self) {
-      std::shared_lock lock{*self.mutex_};
+   template <class SELF> bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
       return self.resolver_->value_.has_value();
    }
@@ -199,8 +187,7 @@ protected:
    static constexpr bool IS_VOID = true;
 
 public:
-   template <class SELF> bool IsResolved(this SELF&& self) {
-      std::shared_lock lock{*self.mutex_};
+   template <class SELF> bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
       return self.resolver_->resolved_;
    }
@@ -266,9 +253,13 @@ protected:
       using final_suspend_t = std::suspend_never;
       init_suspend_t  initial_suspend() { return {}; }
       final_suspend_t final_suspend() noexcept {
-         auto ptr               = std::move(this->parent_->self_owned_);
+         assert(WITH_RESOLVER || this->parent_->IsDone());
+
          this->parent_->handle_ = nullptr;
-         ptr                    = nullptr;
+         if (this->parent_->IsDone()) {
+            this->parent_->OnResolved();
+         }
+
          return {};
       }
       void unhandled_exception() { this->parent_->unhandled_exception(); }
@@ -307,10 +298,45 @@ protected:
    }
 
 public:
+   template <class SELF> bool IsResolved(this SELF&& self) {
+      std::shared_lock lock{*self.mutex_};
+      return self.ValuePromise::IsResolved(lock);
+   }
+
+   template <class SELF> bool IsDone(this SELF&& self, Lock lock) {
+      return self.ValuePromise::IsResolved(lock) || self.resolver_->reject_;
+   }
+
+   template <class SELF> bool IsDone(this SELF&& self) {
+      std::shared_lock lock{*self.mutex_};
+      return self.IsDone(lock);
+   }
+
+   template <class SELF> void OnResolved(this SELF&& self) {
+      if (self.Done()) {
+         std::vector<std::coroutine_handle<>> awaiters{};
+
+         {
+            std::lock_guard lock{*self.mutex_};
+
+            self.awaiters_.swap(awaiters);
+            assert(!self.awaiters_.size());
+         }
+
+         for (auto const& awaiter : awaiters) {
+            assert(awaiter);
+            awaiter.resume();
+         }
+
+         self.self_owned_ = nullptr;
+      }
+   }
+
    Promise& Detach() && {
       assert(!self_owned_);
 
-      if (!ValuePromise::IsResolved()) {
+      std::unique_lock lock{*this->mutex_};
+      if (!ValuePromise::IsResolved(lock)) {
          auto  ptr          = std::unique_ptr<Promise>(new Promise(static_cast<Promise&&>(*this)));
          auto& result       = *ptr;
          result.self_owned_ = std::move(ptr);
@@ -339,6 +365,8 @@ protected:
 
    template <class, bool> friend struct Then;
    friend ValuePromise;
+
+   friend struct Resolver<T, WITH_RESOLVER>;
 };
 
 struct Function {
@@ -448,15 +476,13 @@ public:
          && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
       )
    void ReturnImpl(FROM&&... value) {
-      std::lock_guard lock{*this->mutex_};
+      assert(this->resolver_);
 
       if constexpr (!WITH_RESOLVER) {
          if constexpr (IS_VOID) {
-            assert(!this->resolver_->resolved_);
-            this->resolver_->resolved_ = true;
+            this->resolver_->Resolve();
          } else {
-            assert(!this->resolver_->value_.has_value());
-            ((this->resolver_->value_ = value), ...);
+            (this->resolver_->Resolve(value), ...);
          }
       }
    }
@@ -465,22 +491,6 @@ public:
       std::lock_guard lock{*this->mutex_};
       assert(this->resolver_);
       this->resolver_->exception_ = std::current_exception();
-   }
-
-   void ResumeAwaiters() noexcept {
-      std::vector<std::coroutine_handle<>> awaiters{};
-
-      {
-         std::lock_guard lock{*this->mutex_};
-
-         awaiters_.swap(awaiters);
-         assert(!awaiters_.size());
-      }
-
-      for (auto const& awaiter : awaiters) {
-         assert(awaiter);
-         awaiter.resume();
-      }
    }
 
    template <class FUN, class... ARGS> static constexpr auto Create(FUN&& func, ARGS&&... args) {
@@ -691,7 +701,14 @@ Memcheck() {
       Check& operator=(Check&&) noexcept = delete;
       Check& operator=(Check const&)     = delete;
 
-      ~Check() { assert(Refcount::counter == 0); }
+      ~Check() {
+         auto const refcount = Refcount::counter.load();
+
+         if (refcount) {
+            std::cerr << "Promise: Leak memory detected (" << refcount << " > 0)" << std::endl;
+            assert(false);
+         }
+      }
    };
 
    return Check{};
