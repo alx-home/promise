@@ -27,3 +27,12 @@ target_include_directories(alx-home_promise INTERFACE
 target_include_directories(alx-home_promise PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include/promise
 )
+
+
+win32_executable(TARGET_NAME promise_test 
+    FILES 
+        src/promise_test.cpp
+)
+target_include_directories(promise_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/promise
+)

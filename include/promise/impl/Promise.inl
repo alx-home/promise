@@ -253,11 +253,13 @@ protected:
       using final_suspend_t = std::suspend_never;
       init_suspend_t  initial_suspend() { return {}; }
       final_suspend_t final_suspend() noexcept {
-         assert(WITH_RESOLVER || this->parent_->IsDone());
-
          this->parent_->handle_ = nullptr;
+
          if (this->parent_->IsDone()) {
             this->parent_->OnResolved();
+         } else {
+            // Will be done by the resolver
+            assert(WITH_RESOLVER);
          }
 
          return {};
@@ -313,6 +315,7 @@ public:
    }
 
    template <class SELF> void OnResolved(this SELF&& self) {
+      // If not Done, will be done on final_suspends
       if (self.Done()) {
          std::vector<std::coroutine_handle<>> awaiters{};
 
@@ -323,12 +326,13 @@ public:
             assert(!self.awaiters_.size());
          }
 
+         auto const save_self = std::move(self.self_owned_);
+
+         // We must not use self anymore !
          for (auto const& awaiter : awaiters) {
             assert(awaiter);
             awaiter.resume();
          }
-
-         self.self_owned_ = nullptr;
       }
    }
 
@@ -396,6 +400,8 @@ public:
       if (this->handle_) {
          assert(!this->handle_.done());
          assert(!this->self_owned_);
+      } else {
+         assert(!this->resolver_ || this->IsDone());
       }
    };
 
