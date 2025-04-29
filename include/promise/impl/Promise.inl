@@ -97,11 +97,11 @@ MakeReject(FUN const& reject, ARGS&&... args) {
 namespace promise {
 
 template <class T, bool WITH_RESOLVER> struct Resolver {
-   Promise<T, WITH_RESOLVER>*    promise_{nullptr};
-   std::exception_ptr            exception_{};
-   std::optional<T>              value_{};
-   std::unique_ptr<resolve_t<T>> resolve_{};
-   std::unique_ptr<reject_t>     reject_{};
+   Promise<T, WITH_RESOLVER>*  promise_{nullptr};
+   std::exception_ptr          exception_{};
+   std::optional<T>            value_{};
+   std::unique_ptr<Resolve<T>> resolve_{};
+   std::unique_ptr<Reject>     reject_{};
 
    bool await_ready() const { return value_.has_value(); }
 
@@ -139,10 +139,10 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
 template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
    Promise<void, WITH_RESOLVER>* promise_{nullptr};
 
-   bool                             resolved_{false};
-   std::exception_ptr               exception_{};
-   std::unique_ptr<resolve_t<void>> resolve_{};
-   std::unique_ptr<reject_t>        reject_{};
+   bool                           resolved_{false};
+   std::exception_ptr             exception_{};
+   std::unique_ptr<Resolve<void>> resolve_{};
+   std::unique_ptr<Reject>        reject_{};
 
    bool await_ready() const { return resolved_; }
 
@@ -506,7 +506,7 @@ public:
       auto promise{[&]() constexpr {
          auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
-         auto resolve = std::make_unique<resolve_t<T>>([&resolver = *resolver]() constexpr {
+         auto resolve = std::make_unique<Resolve<T>>([&resolver = *resolver]() constexpr {
             if constexpr (IS_VOID) {
                return [&resolver]() { resolver.Resolve(); };
             } else {
@@ -514,7 +514,7 @@ public:
             }
          }());
 
-         auto reject = std::make_unique<reject_t>([&resolver = *resolver](std::exception_ptr exc) {
+         auto reject = std::make_unique<Reject>([&resolver = *resolver](std::exception_ptr exc) {
             resolver.Reject(exc);
          });
 

@@ -30,19 +30,19 @@ SOFTWARE.
 
 namespace promise {
 
-template <class T = void> struct Resolve {
+template <class T = void> struct ResolveHelper {
    using type = std::function<void()>;
 };
 
 template <class T>
    requires(!std::is_void_v<T>)
-struct Resolve<T> {
+struct ResolveHelper<T> {
    using type = std::function<void(T const&)>;
 };
 
-template <class T = void> using resolve_t = Resolve<T>::type;
+template <class T = void> using Resolve = ResolveHelper<T>::type;
 
-using reject_t = std::function<void(std::exception_ptr)>;
+using Reject = std::function<void(std::exception_ptr)>;
 
 template <class T, bool WITH_RESOLVER = false> struct Promise;
 
@@ -73,20 +73,6 @@ template <class T, bool WITH_RESOLVER> struct return_<Promise<T, WITH_RESOLVER>>
 
 template <class FUN> using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
 
-template <class FUN> struct args_;
-
-template <class FUN>
-   requires(!IS_FUNCTION<FUN> && function_constructible<FUN>)
-struct args_<FUN> {
-   using type = typename args_<decltype(std::function{std::declval<FUN>()})>::type;
-};
-
-template <class T, class... ARGS> struct args_<std::function<T(ARGS...)>> {
-   using type = std::tuple<ARGS...>;
-};
-
-template <class FUN> using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
-
 template <class T> struct IsResolver : std::false_type {};
 
 template <class T> struct IsResolver<std::function<void(T const&)>> : std::true_type {};
@@ -98,6 +84,28 @@ template <class FUN> struct WithResolver : std::false_type {};
 template <class T> struct WithResolver<Promise<T, true>> : std::true_type {};
 
 template <class FUN> static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
+
+template <class FUN> struct args_;
+
+template <class FUN>
+   requires(!IS_FUNCTION<FUN> && function_constructible<FUN>)
+struct args_<FUN> {
+   using type = typename args_<decltype(std::function{std::declval<FUN>()})>::type;
+};
+
+template <class T, class RESOLVE, class REJECT, class... ARGS>
+   requires(WithResolver<T>::value)
+struct args_<std::function<T(RESOLVE, REJECT, ARGS...)>> {
+   using type = std::tuple<ARGS...>;
+};
+
+template <class T, class... ARGS>
+   requires(!WithResolver<T>::value)
+struct args_<std::function<T(ARGS...)>> {
+   using type = std::tuple<ARGS...>;
+};
+
+template <class FUN> using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
 }  // namespace promise
 
@@ -118,8 +126,8 @@ template <class... PROMISE> static constexpr auto All(PROMISE&&... promise);
 
 #include "impl/Promise.inl"
 
-template <class T = void> using resolve_t = promise::resolve_t<T>;
-using reject_t                            = promise::reject_t;
+template <class T = void> using Resolve = promise::Resolve<T>;
+using Reject                            = promise::Reject;
 
 template <class T = void, bool WITH_RESOLVER = false>
 using Promise = promise::Promise<T, WITH_RESOLVER>;
