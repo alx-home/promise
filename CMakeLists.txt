@@ -17,9 +17,6 @@ win32_library(TARGET_NAME alx-home_promise
 )
 add_library(alx-home::promise ALIAS alx-home_promise)
 
-if(PROMISE_MEMCHECK)
-    target_compile_definitions(alx-home_promise PUBLIC PROMISE_MEMCHECK)
-endif(PROMISE_MEMCHECK)
 
 target_include_directories(alx-home_promise INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -33,6 +30,12 @@ win32_executable(TARGET_NAME promise_test
     FILES 
         src/promise_test.cpp
 )
+target_link_libraries(promise_test alx-home::promise)
 target_include_directories(promise_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include/promise
 )
+
+if(PROMISE_MEMCHECK)
+    target_compile_definitions(alx-home_promise PUBLIC PROMISE_MEMCHECK)
+    target_compile_definitions(promise_test PUBLIC PROMISE_MEMCHECK)
+endif(PROMISE_MEMCHECK)

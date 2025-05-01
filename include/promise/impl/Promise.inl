@@ -214,7 +214,7 @@ struct Refcount {
 
    constexpr Refcount() { ++counter; }
 
-   Refcount(Refcount&&) noexcept { ++counter; };
+   Refcount(Refcount&&) noexcept                 = delete;  //{ ++counter; };
    Refcount(Refcount const&) noexcept            = delete;
    Refcount& operator=(Refcount&&) noexcept      = delete;
    Refcount& operator=(Refcount const&) noexcept = delete;
@@ -449,7 +449,7 @@ public:
       return Ready(this->lock_);
    }
 
-   auto await_suspend(std::coroutine_handle<> h) {
+   void await_suspend(std::coroutine_handle<> h) {
       Unlock _{this->lock_};
 
       if constexpr (!WITH_RESOLVER) {
@@ -479,6 +479,36 @@ public:
    }
 
 private:
+   VPromise::Awaitable& Await() final {
+      struct Awaitable
+         : VPromise::Awaitable
+#ifdef PROMISE_MEMCHECK
+         , Refcount
+#endif
+      {
+
+         Awaitable(details::Promise<T, WITH_RESOLVER>& self)
+            : self_(self) {}
+
+         virtual ~Awaitable() = default;
+
+         bool await_ready() final { return self_.await_ready(); }
+
+         void await_resume() final {
+            // Delete this After resume
+            std::unique_ptr<Awaitable> self_ptr(this);
+            self_.await_resume();
+         }
+
+         void await_suspend(std::coroutine_handle<> h) final { self_.await_suspend(h); }
+
+      private:
+         details::Promise<T, WITH_RESOLVER>& self_;
+      };
+
+      return *new Awaitable{*this};
+   }
+
    auto const& GetException(Lock) {
       assert(this->resolver_);
       return this->resolver_->exception_;

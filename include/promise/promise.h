@@ -110,7 +110,17 @@ struct args_<std::function<T(ARGS...)>> {
 template <class FUN> using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
 // For Handling a promise in a pointer
-struct VPromise {};
+struct VPromise {
+   struct Awaitable {
+      virtual bool await_ready()                          = 0;
+      virtual void await_resume()                         = 0;
+      virtual void await_suspend(std::coroutine_handle<>) = 0;
+   };
+
+   virtual ~VPromise() = default;
+
+   virtual Awaitable& Await() = 0;
+};
 using Pointer = std::unique_ptr<VPromise>;
 
 }  // namespace promise
@@ -195,6 +205,8 @@ public:
 
 private:
    std::unique_ptr<Details> details_{};
+
+   Awaitable& Await() final { return details_->Await(); }
 
    Promise(Details::handle_type handle)
       : details_{[&handle]() constexpr {

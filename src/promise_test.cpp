@@ -142,9 +142,16 @@ main() {
                   .Then([]() -> Promise<int> { co_return 888; })
             };
 
+            auto prom_ptr = MakePromise([&]() -> Promise<void> {
+                               co_await prom4;
+                               std::cout << "ok prom_ptr" << std::endl;
+                               co_return;
+                            }).ToPointer();
+
             auto promall{MakePromise([&]() -> Promise<void> {
                auto const [res1, res2, res3, res4, int_] =
                   co_await promise::All(prom, prom2, prom3, prom4, promInt);
+               co_await prom_ptr->Await();
 
                std::cout << res1 << " " << res2 << " " << res3 << " " << res4 << " " << int_
                          << std::endl;
