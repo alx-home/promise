@@ -24,9 +24,13 @@ SOFTWARE.
 
 #pragma once
 
+#include <coroutine>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <type_traits>
+
+template <class T = void, bool WITH_RESOLVER = false> class Promise;
 
 namespace promise {
 
@@ -43,8 +47,6 @@ struct ResolveHelper<T> {
 template <class T = void> using Resolve = ResolveHelper<T>::type;
 
 using Reject = std::function<void(std::exception_ptr)>;
-
-template <class T, bool WITH_RESOLVER = false> struct Promise;
 
 template <class> struct IsFunction : std::false_type {};
 template <class FUN> struct IsFunction<std::function<FUN>> : std::true_type {};
@@ -67,7 +69,7 @@ template <class T, class... ARGS> struct return_<std::function<T(ARGS...)>> {
    using type = T;
 };
 
-template <class T, bool WITH_RESOLVER> struct return_<Promise<T, WITH_RESOLVER>> {
+template <class T, bool WITH_RESOLVER> struct return_<::Promise<T, WITH_RESOLVER>> {
    using type = T;
 };
 
@@ -81,7 +83,7 @@ template <> struct IsResolver<std::function<void()>> : std::true_type {};
 
 template <class FUN> struct WithResolver : std::false_type {};
 
-template <class T> struct WithResolver<Promise<T, true>> : std::true_type {};
+template <class T> struct WithResolver<::Promise<T, true>> : std::true_type {};
 
 template <class FUN> static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
 
@@ -107,6 +109,10 @@ struct args_<std::function<T(ARGS...)>> {
 
 template <class FUN> using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
+// For Handling a promise in a pointer
+struct VPromise {};
+using Pointer = std::unique_ptr<VPromise>;
+
 }  // namespace promise
 
 template <class FUN, class... ARGS>
@@ -122,12 +128,87 @@ void MakeReject(FUN const& reject, ARGS&&... args);
 
 namespace promise {
 template <class... PROMISE> static constexpr auto All(PROMISE&&... promise);
+namespace details {
+template <class T, bool WITH_RESOLVER> class Promise;
 }
+}  // namespace promise
 
 #include "impl/Promise.inl"
 
+template <class T, bool WITH_RESOLVER> class Promise : public promise::VPromise {
+public:
+   using Details      = promise::details::Promise<T, WITH_RESOLVER>;
+   using promise_type = Details::promise_type;
+
+   bool await_ready() {
+      assert(details_);
+      return details_->await_ready();
+   }
+
+   auto await_suspend(std::coroutine_handle<> h) {
+      assert(details_);
+      return details_->await_suspend(h);
+   }
+
+   auto await_resume() noexcept(false) {
+      assert(details_);
+      return details_->await_resume();
+   }
+
+   template <class FUN, class SELF, class... ARGS>
+   constexpr auto Then(this SELF&& self, FUN&& func, ARGS&&... args) {
+      assert(self.details_);
+
+      if constexpr (std::is_lvalue_reference_v<SELF>) {
+         return self.details_->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      } else {
+         // Transfer ownership to next promise
+         return static_cast<Details&&>(*self.details_)
+            .Then(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      }
+   }
+
+   template <class FUN, class SELF, class... ARGS>
+   constexpr auto Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
+      assert(self.details_);
+
+      if constexpr (std::is_lvalue_reference_v<SELF>) {
+         return self.details_->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      } else {
+         // Transfer ownership to next promise
+         return static_cast<Details&&>(*self.details_)
+            .Catch(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      }
+   }
+
+   template <class EXCEPTION, class... ARGS> void ThrowInside(ARGS&&... args) {
+      assert(details_);
+      details_->ThrowInside(std::forward<ARGS>(args)...);
+   }
+
+   auto& Detach() && {
+      assert(details_);
+      return details_->Detach(std::move(details_));
+   }
+
+   promise::Pointer ToPointer() && { return std::move(details_); }
+
+private:
+   std::unique_ptr<Details> details_{};
+
+   Promise(Details::handle_type handle)
+      : details_{[&handle]() constexpr {
+         struct MakeUniqueFriend : Details {
+            MakeUniqueFriend(Details::handle_type handle)
+               : Details(std::move(handle)) {}
+         };
+
+         return std::make_unique<MakeUniqueFriend>(std::move(handle));
+      }()} {}
+
+   friend Details;
+   friend typename Details::PromiseType;
+};
+
 template <class T = void> using Resolve = promise::Resolve<T>;
 using Reject                            = promise::Reject;
-
-template <class T = void, bool WITH_RESOLVER = false>
-using Promise = promise::Promise<T, WITH_RESOLVER>;

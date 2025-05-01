@@ -93,11 +93,13 @@ main() {
                      co_return value;
                   })
                   .Catch([](std::exception_ptr) -> Promise<int> {
-                     // throw std::runtime_error("test");
+                     // throw std::runtime_error("test2");
+                     std::cout << "test caught" << std::endl;
                      co_return 300;
                   })
                   .Then([](std::variant<int, double> value) -> Promise<double> {
-                     // throw std::runtime_error("test");
+                     std::cout << "test2 uncaught" << std::endl;
+                     // throw std::runtime_error("test3");
                      co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
                                                                   : std::get<double>(value) + 8788;
                   })
@@ -149,6 +151,12 @@ main() {
 
                co_return;
             })};
+
+            MakePromise([&]() -> Promise<void> {
+               co_await promall;
+               std::cout << "ok" << std::endl;
+               co_return;
+            }).Detach();
 
             std::this_thread::sleep_for(std::chrono::seconds(1));
             // MakeReject<std::runtime_error>(*rejecter, "titi");
