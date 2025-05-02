@@ -37,6 +37,7 @@ SOFTWARE.
 #include <chrono>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 
@@ -99,15 +100,29 @@ main() {
                   })
                   .Then([](std::variant<int, double> value) -> Promise<double> {
                      std::cout << "test2 uncaught" << std::endl;
-                     // throw std::runtime_error("test3");
+                     throw std::runtime_error("test3");
                      co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
                                                                   : std::get<double>(value) + 8788;
+                  })
+                  .Catch([](std::exception_ptr) -> Promise<double> {
+                     // throw std::runtime_error("test2");
+                     std::cout << "test3 caught" << std::endl;
+                     co_return 300;
                   })
                   .Then(
                      [](Resolve<int> const& resolve, Reject const&, double value
                      ) -> Promise<int, true> { co_return resolve(static_cast<int>(value) + 3); }
                   )
                   .Then([](int value) -> Promise<int> { co_return value + 3; })
+                  .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
+                  .Then([](std::optional<int>) -> Promise<int> { co_return 0; })
+                  .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
+                  .Then([](int) -> Promise<void> { co_return; })
+                  .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
+                  .Then([](std::optional<int>) -> Promise<void> { co_return; })
+                  .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
+                  .Then([]() -> Promise<void> { co_return; })
+                  .Then([]() -> Promise<int> { co_return 800; })
             };
 
             auto prom3{

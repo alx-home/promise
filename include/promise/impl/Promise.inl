@@ -594,8 +594,10 @@ private:
             return static_cast<::Promise<void, false>*>(nullptr);
          } else if constexpr (std::is_void_v<T2>) {
             return static_cast<::Promise<std::optional<T>, false>*>(nullptr);
-         } else if constexpr (std::is_void_v<T> || std::is_same_v<T, T2>) {
+         } else if constexpr (std::is_void_v<T>) {
             return static_cast<::Promise<std::optional<T2>, false>*>(nullptr);
+         } else if constexpr (std::is_same_v<T, T2>) {
+            return static_cast<::Promise<T2, false>*>(nullptr);
          } else {
             return static_cast<::Promise<std::variant<T2, T>, false>*>(nullptr);
          }
@@ -670,22 +672,22 @@ public:
          std::remove_cvref_t<FUN> func_;
       };
       auto holder   = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
-         auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+      auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
-         auto promise = [&]() constexpr {
-            if constexpr (WITH_RESOLVER) {
+      auto promise = [&]() constexpr {
+         if constexpr (WITH_RESOLVER) {
             return holder->func_(
                resolver->resolve_, resolver->reject_, std::forward<ARGS>(args)...
             );
-            } else {
-               return holder->func_(std::forward<ARGS>(args)...);
-            }
-         }();
+         } else {
+            return holder->func_(std::forward<ARGS>(args)...);
+         }
+      }();
 
-         auto const details = promise.details_.get();
-         resolver->promise_ = details;
-         details->resolver_ = std::move(resolver);
-         details->function_ = std::move(holder);
+      auto const details = promise.details_.get();
+      resolver->promise_ = details;
+      details->resolver_ = std::move(resolver);
+      details->function_ = std::move(holder);
 
       promise.details_->handle_();
       return promise;
