@@ -737,7 +737,8 @@ Memcheck() {
          auto const refcount = Refcount::counter.load();
 
          if (refcount) {
-            std::cerr << "Promise: Leak memory detected (" << refcount << " > 0)" << std::endl;
+            std::cerr << "Promise: Leak memory detected (" << refcount << " unterminated promises)"
+                      << std::endl;
             assert(false);
          }
       }
