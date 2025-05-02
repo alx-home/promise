@@ -104,7 +104,7 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
    std::exception_ptr                  exception_{};
    std::optional<T>                    value_{};
    Resolve<T>                          resolve_{[this](T const& value) { this->Resolve(value); }};
-   Reject reject_{[this](std::exception_ptr exc) { this->Reject(exc); }};
+   Reject reject_{[this](std::exception_ptr exc) { this->Reject(std::move(exc)); }};
 
    bool await_ready() const { return value_.has_value(); }
 
@@ -128,7 +128,7 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
 
       assert(!value_.has_value());
       assert(!exception_);
-      exception_ = exception;
+      exception_ = std::move(exception);
 
       assert(promise_);
       promise_->OnResolved(lock);
@@ -214,7 +214,7 @@ struct Refcount {
 
    constexpr Refcount() { ++counter; }
 
-   Refcount(Refcount&&) noexcept                 = delete;  //{ ++counter; };
+   Refcount(Refcount&&) noexcept                 = delete;
    Refcount(Refcount const&) noexcept            = delete;
    Refcount& operator=(Refcount&&) noexcept      = delete;
    Refcount& operator=(Refcount const&) noexcept = delete;

@@ -28,6 +28,7 @@ SOFTWARE.
 #include <exception>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <type_traits>
 
 template <class T = void, bool WITH_RESOLVER = false> class Promise;
@@ -163,6 +164,18 @@ public:
    auto await_resume() noexcept(false) {
       assert(details_);
       return details_->await_resume();
+   }
+
+   bool Done() noexcept(false) {
+      assert(details_);
+      std::shared_lock lock{details_->mutex_};
+      return details_->IsDone(lock);
+   }
+
+   std::exception_ptr Exception() {
+      assert(details_);
+      std::shared_lock lock{details_->mutex_};
+      return details_->GetException(lock);
    }
 
    template <class FUN, class SELF, class... ARGS>
