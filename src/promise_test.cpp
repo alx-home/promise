@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include <Windows.h>
 #include <WinUser.h>
+#include <Windows.h>
 #include <dwmapi.h>
 #include <errhandlingapi.h>
 #include <intsafe.h>
@@ -67,14 +68,13 @@ main() {
             Reject const*       rejecter{};
 
             auto prom{MakePromise(
-               [&resolver, &rejecter](
-                  Resolve<int> const& resolve, Reject const& reject
-               ) -> Promise<int, true> {
-                  resolver = &resolve;
-                  rejecter = &reject;
-                  //   MakeReject<std::runtime_error>(*rejecter, "tutu");
-                  co_return;
-               }
+              [&resolver,
+               &rejecter](Resolve<int> const& resolve, Reject const& reject) -> Promise<int, true> {
+                 resolver = &resolve;
+                 rejecter = &reject;
+                 //   MakeReject<std::runtime_error>(*rejecter, "tutu");
+                 co_return;
+              }
             )};
 
             auto prom2{MakePromise([&]() -> Promise<int> {
@@ -83,78 +83,84 @@ main() {
                co_return result;
             })};
 
-            auto promInt{
-               prom2
-                  .Then([](int value) -> Promise<double> {
-                     throw std::runtime_error("test");
-                     co_return value + 3;
-                  })
-                  .Then([](double value) -> Promise<double> {
-                     std::cout << "not evaluted" << std::endl;
-                     co_return value;
-                  })
-                  .Catch([](std::exception_ptr) -> Promise<int> {
-                     // throw std::runtime_error("test2");
-                     std::cout << "test caught" << std::endl;
-                     co_return 300;
-                  })
-                  .Then([](std::variant<int, double> value) -> Promise<double> {
-                     std::cout << "test2 uncaught" << std::endl;
-                     throw std::runtime_error("test3");
-                     co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
-                                                                  : std::get<double>(value) + 8788;
-                  })
-                  .Catch([](std::exception_ptr) -> Promise<double> {
-                     // throw std::runtime_error("test2");
-                     std::cout << "test3 caught" << std::endl;
-                     co_return 300;
-                  })
-                  .Then(
-                     [](Resolve<int> const& resolve, Reject const&, double value
-                     ) -> Promise<int, true> { co_return resolve(static_cast<int>(value) + 3); }
-                  )
-                  .Then([](int value) -> Promise<int> { co_return value + 3; })
-                  .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
-                  .Then([](std::optional<int>) -> Promise<int> { co_return 0; })
-                  .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
-                  .Then([](int) -> Promise<void> { co_return; })
-                  .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
-                  .Then([](std::optional<int>) -> Promise<void> { co_return; })
-                  .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
-                  .Then([]() -> Promise<void> { co_return; })
-                  .Then([]() -> Promise<int> { co_return 800; })
+            auto prom_catch_through{
+              MakePromise([&]() -> Promise<int> { co_return 0; })
+                .Then([](int value) -> Promise<int> { co_return value + 3; })
+                .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
+                .Then([](std::optional<int>) -> Promise<int> { co_return 0; })
+                .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
+                .Then([](int) -> Promise<void> { co_return; })
+                .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
+                .Then([](std::optional<int>) -> Promise<void> { co_return; })
+                .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
+                .Then([]() -> Promise<void> { co_return; })
+                .Then([]() -> Promise<int> { co_return 800; }),
+            };
+
+            auto prom_int{
+              prom2
+                .Then([](int value) -> Promise<double> {
+                   throw std::runtime_error("test");
+                   co_return value + 3;
+                })
+                .Then([](double value) -> Promise<double> {
+                   std::cout << "not evaluted" << std::endl;
+                   co_return value;
+                })
+                .Catch([](std::exception_ptr) -> Promise<int> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test caught" << std::endl;
+                   co_return 300;
+                })
+                .Then([](std::variant<int, double> value) -> Promise<double> {
+                   std::cout << "test2 uncaught" << std::endl;
+                   throw std::runtime_error("test3");
+                   co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
+                                                                : std::get<double>(value) + 8788;
+                })
+                .Catch([](std::exception_ptr) -> Promise<double> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test3 caught" << std::endl;
+                   co_return 300;
+                })
+                .Then(
+                  [](
+                    Resolve<int> const& resolve, Reject const&, double value
+                  ) -> Promise<int, true> { co_return resolve(static_cast<int>(value) + 3); }
+                )
             };
 
             auto prom3{
-               MakePromise([&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
-                  try {
-                     resolve((co_await prom2) + 5);
-                  } catch (std::runtime_error const& e) {
-                     std::cout << "PP3 " << e.what() << std::endl;
-                     throw;
-                  }
-                  co_return;
-               })
+              MakePromise([&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
+                 try {
+                    resolve((co_await prom2) + 5);
+                 } catch (std::runtime_error const& e) {
+                    std::cout << "PP3 " << e.what() << std::endl;
+                    throw;
+                 }
+                 co_return;
+              })
             };
 
             auto prom4{
-               MakePromise([]() -> Promise<int> { co_return 999; })
-                  .Then([](int value) -> Promise<void> {
+              MakePromise([]() -> Promise<int> { co_return 999; })
+                .Then([](int value) -> Promise<void> {
+                   std::cout << value << std::endl;
+                   co_return;
+                })
+                .Then([]() -> Promise<void> { co_return; })
+                .Then([](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
+                   co_return resolve(111);
+                })
+                .Then(
+                  [](
+                    Resolve<void> const& resolve, Reject const&, int value
+                  ) -> Promise<void, true> {
                      std::cout << value << std::endl;
-                     co_return;
-                  })
-                  .Then([]() -> Promise<void> { co_return; })
-                  .Then([](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
-                     co_return resolve(111);
-                  })
-                  .Then(
-                     [](Resolve<void> const& resolve, Reject const&, int value
-                     ) -> Promise<void, true> {
-                        std::cout << value << std::endl;
-                        co_return resolve();
-                     }
-                  )
-                  .Then([]() -> Promise<int> { co_return 888; })
+                     co_return resolve();
+                  }
+                )
+                .Then([]() -> Promise<int> { co_return 888; })
             };
 
             auto prom_ptr = MakePromise([&]() -> Promise<void> {
@@ -164,8 +170,8 @@ main() {
                             }).ToPointer();
 
             auto promall{MakePromise([&]() -> Promise<void> {
-               auto const [res1, res2, res3, res4, int_] =
-                  co_await promise::All(prom, prom2, prom3, prom4, promInt);
+               auto const [res1, res2, res3, res4, int_, _] =
+                 co_await promise::All(prom, prom2, prom3, prom4, prom_int, prom_catch_through);
                co_await prom_ptr->Await();
 
                std::cout << res1 << " " << res2 << " " << res3 << " " << res4 << " " << int_

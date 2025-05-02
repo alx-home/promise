@@ -41,8 +41,8 @@ SOFTWARE.
 #include <utility>
 #include <variant>
 
-// Add a cast operator to an exception pointer (Reverse engineering of MSVC22 must not works if
-// compiled with other compiler)
+// Add a cast operator to an exception pointer (Reverse engineering of MSVC22
+// must not works if compiled with other compiler)
 template <class T>
    requires(std::is_class_v<T>)
 struct ExceptionWrapper : std::exception_ptr {
@@ -51,7 +51,9 @@ struct ExceptionWrapper : std::exception_ptr {
 
    explicit(false) operator T&() {
       static_assert(
-         _MSC_VER == 1943, "Only tested on msvc 2022, with other compiler use it at your own risk!"
+        _MSC_VER == 1943,
+        "Only tested on msvc 2022, with other "
+        "compiler use it at your own risk!"
       );
 
       assert(*this);
@@ -64,16 +66,16 @@ struct ExceptionWrapper : std::exception_ptr {
 
       ExceptionPtr data;
       std::ranges::copy_n(
-         reinterpret_cast<std::byte*>(this),
-         sizeof(ExceptionPtr),
-         reinterpret_cast<std::byte*>(&data)
+        reinterpret_cast<std::byte*>(this),
+        sizeof(ExceptionPtr),
+        reinterpret_cast<std::byte*>(&data)
       );
 
       std::byte* addr;
       std::ranges::copy_n(
-         reinterpret_cast<std::byte*>(data.data2_) + 0x38,
-         sizeof(addr),
-         reinterpret_cast<std::byte*>(&addr)
+        reinterpret_cast<std::byte*>(data.data2_) + 0x38,
+        sizeof(addr),
+        reinterpret_cast<std::byte*>(&addr)
       );
 
       auto ptr = reinterpret_cast<T*>(addr);
@@ -102,11 +104,13 @@ struct Terminate : std::runtime_error {
 template <class T, bool WITH_RESOLVER> struct Resolver {
    details::Promise<T, WITH_RESOLVER>* promise_{nullptr};
    std::exception_ptr                  exception_{};
-   std::optional<T>                    value_{};
-   Resolve<T>                          resolve_{[this](T const& value) { this->Resolve(value); }};
-   Reject reject_{[this](std::exception_ptr exc) { this->Reject(std::move(exc)); }};
 
-   bool await_ready() const { return value_.has_value(); }
+   // unique_ptr to handle std::optional<std::optional>...
+   std::unique_ptr<T> value_{};
+   Resolve<T>         resolve_{[this](T const& value) { this->Resolve(value); }};
+   Reject             reject_{[this](std::exception_ptr exc) { this->Reject(std::move(exc)); }};
+
+   bool await_ready() const { return value_; }
 
    void await_resume() const {}
 
@@ -115,9 +119,9 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
    void Resolve(TT&& value) {
       std::unique_lock lock{promise_->mutex_};
 
-      assert(!value_.has_value());
+      assert(!value_);
       assert(!exception_);
-      value_ = std::forward<TT>(value);
+      value_ = std::make_unique<T>(std::forward<TT>(value));
 
       assert(promise_);
       promise_->OnResolved(lock);
@@ -126,7 +130,7 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
    void Reject(std::exception_ptr exception) {
       std::unique_lock lock{promise_->mutex_};
 
-      assert(!value_.has_value());
+      assert(!value_);
       assert(!exception_);
       exception_ = std::move(exception);
 
@@ -171,9 +175,9 @@ template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
 };
 
 using Lock = std::variant<
-   std::reference_wrapper<std::shared_lock<std::shared_mutex>>,
-   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
-   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
+  std::reference_wrapper<std::shared_lock<std::shared_mutex>>,
+  std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
+  std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
 template <class T, bool VOID_TYPE> struct ValuePromise : VPromise {
 protected:
@@ -182,18 +186,18 @@ protected:
 public:
    template <class SELF> auto const& GetValue(this SELF&& self, Lock) {
       assert(self.resolver_);
-      assert(self.resolver_->value_.has_value());
-      return self.resolver_->value_.value();
+      assert(self.resolver_->value_);
+      return *self.resolver_->value_;
    }
 
    template <class SELF> auto const& GetValue(this SELF&& self) {
-      std::shared_lock lock{*self.mutex_};
+      std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
    }
 
    template <class SELF> bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
-      return self.resolver_->value_.has_value();
+      return self.resolver_->value_ != nullptr;
    }
 };
 
@@ -310,8 +314,8 @@ protected:
 
       template <class... FROM>
          requires(
-            (std::is_convertible_v<FROM, T> && ...)
-            && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
+           (std::is_convertible_v<FROM, T> && ...)
+           && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
          )
       void ReturnImpl(FROM&&... value) {
          this->parent_->ReturnImpl(std::forward<FROM>(value)...);
@@ -324,8 +328,10 @@ protected:
 
    explicit Handle(handle_type handle)
       : handle_{std::move(handle)} {
-      assert(handle_);
-      handle_.promise().parent_ = static_cast<details::Promise<T, WITH_RESOLVER>*>(this);
+      if (handle_) {
+         handle_.promise().parent_ = static_cast<details::Promise<T, WITH_RESOLVER>*>(this);
+      }
+      // handle_ can be null in case of Catch through
    }
 
 public:
@@ -334,11 +340,11 @@ public:
    }
 
    template <class SELF> bool IsDone(this SELF&& self, Lock lock) {
-      return self.ValuePromise::IsResolved(lock) || self.resolver_->reject_;
+      return self.ValuePromise::IsResolved(lock) || self.resolver_->exception_;
    }
 
    template <class SELF> bool IsDone(this SELF&& self) {
-      std::shared_lock lock{*self.mutex_};
+      std::shared_lock lock{self.mutex_};
       return self.IsDone(lock);
    }
 
@@ -363,7 +369,7 @@ public:
    }
 
    details::Promise<T, WITH_RESOLVER>& Detach(
-      std::unique_ptr<details::Promise<T, WITH_RESOLVER>>&& self
+     std::unique_ptr<details::Promise<T, WITH_RESOLVER>>&& self
    ) {
       std::unique_lock lock{self->mutex_};
       assert(!self->self_owned_);
@@ -529,8 +535,8 @@ private:
 
    template <class... FROM>
       requires(
-         (std::is_convertible_v<FROM, T> && ...)
-         && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
+        (std::is_convertible_v<FROM, T> && ...)
+        && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
       )
    void ReturnImpl(FROM&&... value) {
       assert(this->resolver_);
@@ -548,27 +554,39 @@ private:
       // Promise return type
       using T2 = return_t<return_t<FUN>>;
 
-      return ::MakePromise(
-         [func = std::forward<FUN>(func
-          )](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> ::Promise<T2, false> {
+      if constexpr (!promise::WITH_RESOLVER<FUN>) {
+         // Optimisation skip coroutine frame creation
+
+         if (this->IsDone()) {
             if constexpr (IS_VOID) {
-               co_await self;
-               co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
+               return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
             } else {
-               co_return co_await ::MakePromise(
-                  std::move(func), co_await self, std::forward<ARGS>(args)...
-               );
+               return ::MakePromise(std::move(func), this->GetValue(), std::forward<ARGS>(args)...);
             }
-         },
-         *this,
-         std::forward<ARGS>(args)...
+         }
+      }  // else @todo
+
+      return ::MakePromise(
+        [func = std::forward<FUN>(func
+         )](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> ::Promise<T2, false> {
+           if constexpr (IS_VOID) {
+              co_await self;
+              co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
+           } else {
+              co_return co_await ::MakePromise(
+                std::move(func), co_await self, std::forward<ARGS>(args)...
+              );
+           }
+        },
+        *this,
+        std::forward<ARGS>(args)...
       );
    }
 
    template <class FUN, class... ARGS>
    constexpr auto Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       return this->Detach(std::move(self))
-         .Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+        .Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
    template <class FUN, class... ARGS> constexpr auto Catch(FUN&& func, ARGS&&... args) & {
@@ -581,12 +599,13 @@ private:
 
       static constexpr bool IS_EXC_PTR = std::is_same_v<Exception, std::exception_ptr>;
       static constexpr bool IS_VALID_V =
-         IS_EXC_PTR
-         || (std::is_lvalue_reference_v<Exception> && std::is_const_v<std::remove_reference_t<Exception>>);
+        IS_EXC_PTR
+        || (std::is_lvalue_reference_v<Exception> && std::is_const_v<std::remove_reference_t<Exception>>);
       static_assert(
-         IS_VALID_V,
-         "Catch promise argument must be : std::exception_ptr or a const reference to an exception "
-         "!"
+        IS_VALID_V,
+        "Catch promise argument must be : std::exception_ptr or a "
+        "const reference to an exception "
+        "!"
       );
 
       using return_t = std::remove_pointer_t<decltype([]() constexpr {
@@ -603,60 +622,98 @@ private:
          }
       }())>;
 
-      return MakePromise(
-         [func =
-             std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> return_t {
-            using exception_t = std::remove_cvref_t<Exception>;
-            ExceptionWrapper<exception_t> exc{};
+      if (this->IsDone()) {
+         // Optimisation skip coroutine frame creation
 
-            try {
-               if constexpr (std::is_void_v<T>) {
-                  co_await self;
-                  if constexpr (std::is_void_v<T2>) {
-                     co_return;
-                  } else {
-                     co_return std::optional<T2>{};
-                  }
-               } else {
-                  co_return co_await self;
-               }
-            } catch (std::remove_cvref_t<Exception> const& e) {
-               if constexpr (!IS_EXC_PTR) {
-                  exc = std::current_exception();
-               } else {
-                  throw;
-               }
-            } catch (...) {
-               if constexpr (IS_EXC_PTR) {
-                  exc = std::current_exception();
-               } else {
-                  throw;
-               }
-            }
-
-            assert(exc);
-
+         if (auto lock = std::shared_lock{this->mutex_}; this->GetException(lock)) {
+            return return_t::Reject(this->GetException(lock));
+         } else if constexpr (std::is_void_v<T>) {
             if constexpr (std::is_void_v<T2>) {
-               co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
-
-               if constexpr (std::is_void_v<T>) {
-                  co_return;
-               } else {
-                  co_return std::optional<T>{};
-               }
+               return return_t::Resolve();
             } else {
-               co_return co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+               return return_t::Resolve(std::optional<T2>{});
             }
-         },
-         *this,
-         std::forward<ARGS>(args)...
+         } else {
+            return return_t::Resolve(this->GetValue());
+         }
+      }
+
+      return MakePromise(
+        [func =
+           std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> return_t {
+           using exception_t = std::remove_cvref_t<Exception>;
+           ExceptionWrapper<exception_t> exc{};
+
+           try {
+              if constexpr (std::is_void_v<T>) {
+                 co_await self;
+                 if constexpr (std::is_void_v<T2>) {
+                    co_return;
+                 } else {
+                    co_return std::optional<T2>{};
+                 }
+              } else {
+                 co_return co_await self;
+              }
+           } catch (std::remove_cvref_t<Exception> const& e) {
+              exc = std::current_exception();
+           } catch (...) {
+              if constexpr (IS_EXC_PTR) {
+                 exc = std::current_exception();
+              } else {
+                 throw;
+              }
+           }
+
+           assert(exc);
+
+           if constexpr (std::is_void_v<T2>) {
+              co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+
+              if constexpr (std::is_void_v<T>) {
+                 co_return;
+              } else {
+                 co_return std::optional<T>{};
+              }
+           } else {
+              co_return co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+           }
+        },
+        *this,
+        std::forward<ARGS>(args)...
       );
    }
 
    template <class FUN, class... ARGS>
    constexpr auto Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       return this->Detach(std::move(self))
-         .Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+        .Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+   }
+
+   template <class... ARGS> static constexpr auto Resolve(ARGS&&... args) {
+      ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
+      auto                        resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+
+      auto const details = promise.details_.get();
+      resolver->promise_ = details;
+      details->resolver_ = std::move(resolver);
+
+      details->resolver_->Resolve(std::forward<ARGS>(args)...);
+
+      return promise;
+   }
+
+   template <class... ARGS> static constexpr auto Reject(ARGS&&... args) {
+      ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
+      auto                        resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+
+      auto const details = promise.details_.get();
+      resolver->promise_ = details;
+      details->resolver_ = std::move(resolver);
+
+      details->resolver_->Reject(std::forward<ARGS>(args)...);
+
+      return promise;
    }
 
 public:
@@ -677,7 +734,7 @@ public:
       auto promise = [&]() constexpr {
          if constexpr (WITH_RESOLVER) {
             return holder->func_(
-               resolver->resolve_, resolver->reject_, std::forward<ARGS>(args)...
+              resolver->resolve_, resolver->reject_, std::forward<ARGS>(args)...
             );
          } else {
             return holder->func_(std::forward<ARGS>(args)...);
@@ -706,19 +763,19 @@ template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
    return MakePromise(
-      [](PROMISE&&... promise) -> ::Promise<std::tuple<std::conditional_t<
-                                  std::is_void_v<return_t<PROMISE>>,
-                                  std::nullopt_t,
-                                  return_t<PROMISE>>...>> {
-         co_return std::make_tuple(([]<class... RESULT>(RESULT... result) constexpr {
-            if constexpr (sizeof...(RESULT)) {
-               return result...[0];
-            } else {
-               return std::nullopt;
-            }
-         }(co_await promise))...);
-      },
-      std::forward<PROMISE>(promise)...
+     [](PROMISE&&... promise) -> ::Promise<std::tuple<std::conditional_t<
+                                std::is_void_v<return_t<PROMISE>>,
+                                std::nullopt_t,
+                                return_t<PROMISE>>...>> {
+        co_return std::make_tuple(([]<class... RESULT>(RESULT... result) constexpr {
+           if constexpr (sizeof...(RESULT)) {
+              return result...[0];
+           } else {
+              return std::nullopt;
+           }
+        }(co_await promise))...);
+     },
+     std::forward<PROMISE>(promise)...
    );
 }
 
@@ -757,6 +814,6 @@ MakePromise(FUN&& func, ARGS&&... args) {
    using namespace promise;
 
    return details::Promise<return_t<return_t<FUN>>, WITH_RESOLVER<FUN>>::Create(
-      std::forward<FUN>(func), std::forward<ARGS>(args)...
+     std::forward<FUN>(func), std::forward<ARGS>(args)...
    );
 }

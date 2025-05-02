@@ -187,7 +187,7 @@ public:
       } else {
          // Transfer ownership to next promise
          return static_cast<Details&&>(*self.details_)
-            .Then(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
+           .Then(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
       }
    }
 
@@ -200,8 +200,16 @@ public:
       } else {
          // Transfer ownership to next promise
          return static_cast<Details&&>(*self.details_)
-            .Catch(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
+           .Catch(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
       }
+   }
+
+   template <class... ARGS> static constexpr auto Resolve(ARGS&&... args) {
+      return Details::Promise::Resolve(std::forward<ARGS>(args)...);
+   }
+
+   template <class... ARGS> static constexpr auto Reject(ARGS&&... args) {
+      return Details::Promise::Reject(std::forward<ARGS>(args)...);
    }
 
    auto& Detach() && {
@@ -233,6 +241,7 @@ private:
 
    friend Details;
    friend typename Details::PromiseType;
+   template <class, bool> friend class ::promise::details::Promise;
 };
 
 template <class T = void> using Resolve = promise::Resolve<T>;
