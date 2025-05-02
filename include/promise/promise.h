@@ -201,12 +201,17 @@ public:
       return details_->Detach(std::move(details_));
    }
 
-   promise::Pointer ToPointer() && { return std::move(details_); }
+   template <class TYPE = promise::VPromise> auto ToPointer() && {
+      return std::unique_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
+   }
 
 private:
    std::unique_ptr<Details> details_{};
 
    Awaitable& Await() final { return details_->Await(); }
+
+   Promise(std::unique_ptr<Details> details)
+      : details_(std::move(details)) {}
 
    Promise(Details::handle_type handle)
       : details_{[&handle]() constexpr {
