@@ -557,7 +557,7 @@ private:
       if constexpr (!promise::WITH_RESOLVER<FUN>) {
          // Optimisation skip coroutine frame creation
 
-         if (this->IsDone()) {
+         if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
             if constexpr (IS_VOID) {
                return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
             } else {
