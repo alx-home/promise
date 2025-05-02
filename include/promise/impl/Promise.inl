@@ -103,8 +103,8 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
    details::Promise<T, WITH_RESOLVER>* promise_{nullptr};
    std::exception_ptr                  exception_{};
    std::optional<T>                    value_{};
-   std::unique_ptr<Resolve<T>>         resolve_{};
-   std::unique_ptr<Reject>             reject_{};
+   Resolve<T>                          resolve_{[this](T const& value) { this->Resolve(value); }};
+   Reject reject_{[this](std::exception_ptr exc) { this->Reject(exc); }};
 
    bool await_ready() const { return value_.has_value(); }
 
@@ -138,10 +138,10 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
 template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
    details::Promise<void, WITH_RESOLVER>* promise_{nullptr};
 
-   bool                           resolved_{false};
-   std::exception_ptr             exception_{};
-   std::unique_ptr<Resolve<void>> resolve_{};
-   std::unique_ptr<Reject>        reject_{};
+   bool               resolved_{false};
+   std::exception_ptr exception_{};
+   Resolve<void>      resolve_{[this]() { this->Resolve(); }};
+   Reject             reject_{[this](std::exception_ptr exc) { this->Reject(exc); }};
 
    bool await_ready() const { return resolved_; }
 
@@ -669,43 +669,25 @@ public:
 
          std::remove_cvref_t<FUN> func_;
       };
-      auto holder = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
-
-      auto promise{[&]() constexpr {
+      auto holder   = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
          auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
-
-         auto resolve = std::make_unique<Resolve<T>>([&resolver = *resolver]() constexpr {
-            if constexpr (IS_VOID) {
-               return [&resolver]() { resolver.Resolve(); };
-            } else {
-               return [&resolver](T const& value) { resolver.Resolve(value); };
-            }
-         }());
-
-         auto reject = std::make_unique<Reject>([&resolver = *resolver](std::exception_ptr exc) {
-            resolver.Reject(exc);
-         });
 
          auto promise = [&]() constexpr {
             if constexpr (WITH_RESOLVER) {
-               return holder->func_(*resolve, *reject, std::forward<ARGS>(args)...);
+            return holder->func_(
+               resolver->resolve_, resolver->reject_, std::forward<ARGS>(args)...
+            );
             } else {
                return holder->func_(std::forward<ARGS>(args)...);
             }
          }();
-
-         resolver->resolve_ = std::move(resolve);
-         resolver->reject_  = std::move(reject);
 
          auto const details = promise.details_.get();
          resolver->promise_ = details;
          details->resolver_ = std::move(resolver);
          details->function_ = std::move(holder);
 
-         details->handle_();
-         return promise;
-      }()};
-
+      promise.details_->handle_();
       return promise;
    }
 
