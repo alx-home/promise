@@ -191,11 +191,6 @@ public:
       }
    }
 
-   template <class EXCEPTION, class... ARGS> void ThrowInside(ARGS&&... args) {
-      assert(details_);
-      details_->ThrowInside(std::forward<ARGS>(args)...);
-   }
-
    auto& Detach() && {
       assert(details_);
       return details_->Detach(std::move(details_));
