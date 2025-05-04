@@ -22,12 +22,41 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#ifdef PROMISE_MEMCHECK
-
-#   include "impl/Promise.inl"
+#include "impl/Promise.inl"
 
 namespace promise {
+#ifdef PROMISE_MEMCHECK
 std::atomic<std::size_t> Refcount::counter{0};
-}  // namespace promise
-
 #endif  // PROMISE_MEMCHECK
+
+Reject::Reject(std::function<void(std::exception_ptr)> impl)
+   : impl_(std::move(impl)) {}
+
+bool
+Reject::operator()(std::exception_ptr exception) const {
+   if (!rejected_.exchange(true)) {
+      impl_(std::move(exception));
+      return true;
+   }
+
+   return false;
+}
+
+Reject::operator bool() const { return rejected_; }
+
+Resolve<void>::Resolve(std::function<void()> impl)
+   : impl_(std::move(impl)) {}
+
+bool
+Resolve<void>::operator()() const {
+   if (!resolved_.exchange(true)) {
+      impl_();
+      return true;
+   }
+
+   return false;
+}
+
+Resolve<void>::operator bool() const { return resolved_; }
+
+}  // namespace promise

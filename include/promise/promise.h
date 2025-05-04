@@ -29,28 +29,61 @@ SOFTWARE.
 #include <functional>
 #include <memory>
 #include <shared_mutex>
+#include <stdexcept>
 #include <type_traits>
 
-template <class T = void, bool WITH_RESOLVER = false> class Promise;
+template <class T = void, bool WITH_RESOLVER = false>
+class Promise;
 
 namespace promise {
 
-template <class T = void> struct ResolveHelper {
-   using type = std::function<void()>;
+struct Exception : std::runtime_error {
+   using std::runtime_error::runtime_error;
+};
+
+template <class T = void>
+struct Resolve;
+
+template <>
+struct Resolve<void> {
+   Resolve(std::function<void()> impl);
+
+   bool operator()() const;
+   operator bool() const;
+
+private:
+   std::function<void()>     impl_;
+   mutable std::atomic<bool> resolved_{false};
 };
 
 template <class T>
    requires(!std::is_void_v<T>)
-struct ResolveHelper<T> {
-   using type = std::function<void(T const&)>;
+struct Resolve<T> {
+   Resolve(std::function<void(T const&)> impl);
+
+   bool operator()(T const&) const;
+   operator bool() const;
+
+private:
+   std::function<void(T const&)> impl_;
+   mutable std::atomic<bool>     resolved_{false};
 };
 
-template <class T = void> using Resolve = ResolveHelper<T>::type;
+struct Reject {
+   Reject(std::function<void(std::exception_ptr)> impl);
 
-using Reject = std::function<void(std::exception_ptr)>;
+   bool operator()(std::exception_ptr exception) const;
+   operator bool() const;
 
-template <class> struct IsFunction : std::false_type {};
-template <class FUN> struct IsFunction<std::function<FUN>> : std::true_type {};
+private:
+   std::function<void(std::exception_ptr)> impl_;
+   mutable std::atomic<bool>               rejected_{false};
+};
+
+template <class>
+struct IsFunction : std::false_type {};
+template <class FUN>
+struct IsFunction<std::function<FUN>> : std::true_type {};
 
 template <class FUN>
 static constexpr bool IS_FUNCTION = IsFunction<std::remove_cvref_t<FUN>>::value;
@@ -58,7 +91,8 @@ static constexpr bool IS_FUNCTION = IsFunction<std::remove_cvref_t<FUN>>::value;
 template <class FUN>
 concept function_constructible = requires(FUN fun) { std::function{fun}; };
 
-template <class FUN> struct return_;
+template <class FUN>
+struct return_;
 
 template <class FUN>
    requires(!IS_FUNCTION<FUN> && function_constructible<FUN>)
@@ -66,29 +100,39 @@ struct return_<FUN> {
    using type = typename return_<decltype(std::function{std::declval<FUN>()})>::type;
 };
 
-template <class T, class... ARGS> struct return_<std::function<T(ARGS...)>> {
+template <class T, class... ARGS>
+struct return_<std::function<T(ARGS...)>> {
    using type = T;
 };
 
-template <class T, bool WITH_RESOLVER> struct return_<::Promise<T, WITH_RESOLVER>> {
+template <class T, bool WITH_RESOLVER>
+struct return_<::Promise<T, WITH_RESOLVER>> {
    using type = T;
 };
 
-template <class FUN> using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
+template <class FUN>
+using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
 
-template <class T> struct IsResolver : std::false_type {};
+template <class T>
+struct IsResolver : std::false_type {};
 
-template <class T> struct IsResolver<std::function<void(T const&)>> : std::true_type {};
+template <class T>
+struct IsResolver<std::function<void(T const&)>> : std::true_type {};
 
-template <> struct IsResolver<std::function<void()>> : std::true_type {};
+template <>
+struct IsResolver<std::function<void()>> : std::true_type {};
 
-template <class FUN> struct WithResolver : std::false_type {};
+template <class FUN>
+struct WithResolver : std::false_type {};
 
-template <class T> struct WithResolver<::Promise<T, true>> : std::true_type {};
+template <class T>
+struct WithResolver<::Promise<T, true>> : std::true_type {};
 
-template <class FUN> static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
+template <class FUN>
+static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
 
-template <class FUN> struct args_;
+template <class FUN>
+struct args_;
 
 template <class FUN>
    requires(!IS_FUNCTION<FUN> && function_constructible<FUN>)
@@ -108,7 +152,8 @@ struct args_<std::function<T(ARGS...)>> {
    using type = std::tuple<ARGS...>;
 };
 
-template <class FUN> using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
+template <class FUN>
+using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
 // For Handling a promise in a pointer
 struct VPromise {
@@ -118,9 +163,11 @@ struct VPromise {
       virtual void await_suspend(std::coroutine_handle<>) = 0;
    };
 
+   virtual void VDetach() && = 0;
+
    virtual ~VPromise() = default;
 
-   virtual Awaitable& Await() = 0;
+   virtual Awaitable& VAwait() = 0;
 };
 using Pointer = std::unique_ptr<VPromise>;
 
@@ -134,19 +181,22 @@ template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
 static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
 
-template <class EXCEPTION, class FUN, class... ARGS>
-void MakeReject(FUN const& reject, ARGS&&... args);
+template <class EXCEPTION, bool RELAXED = true, class... ARGS>
+bool MakeReject(promise::Reject const& reject, ARGS&&... args);
 
 namespace promise {
-template <class... PROMISE> static constexpr auto All(PROMISE&&... promise);
+template <class... PROMISE>
+static constexpr auto All(PROMISE&&... promise);
 namespace details {
-template <class T, bool WITH_RESOLVER> class Promise;
+template <class T, bool WITH_RESOLVER>
+class Promise;
 }
 }  // namespace promise
 
 #include "impl/Promise.inl"
 
-template <class T, bool WITH_RESOLVER> class Promise : public promise::VPromise {
+template <class T, bool WITH_RESOLVER>
+class Promise : public promise::VPromise {
 public:
    using Details      = promise::details::Promise<T, WITH_RESOLVER>;
    using promise_type = Details::promise_type;
@@ -204,11 +254,13 @@ public:
       }
    }
 
-   template <class... ARGS> static constexpr auto Resolve(ARGS&&... args) {
+   template <class... ARGS>
+   static constexpr auto Resolve(ARGS&&... args) {
       return Details::Promise::Resolve(std::forward<ARGS>(args)...);
    }
 
-   template <class... ARGS> static constexpr auto Reject(ARGS&&... args) {
+   template <class... ARGS>
+   static constexpr auto Reject(ARGS&&... args) {
       return Details::Promise::Reject(std::forward<ARGS>(args)...);
    }
 
@@ -217,14 +269,17 @@ public:
       return details_->Detach(std::move(details_));
    }
 
-   template <class TYPE = promise::VPromise> auto ToPointer() && {
+   void VDetach() && override { static_cast<Promise&&>(*this).Detach(); }
+
+   template <class TYPE = promise::VPromise>
+   auto ToPointer() && {
       return std::unique_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
    }
 
 private:
    std::unique_ptr<Details> details_{};
 
-   Awaitable& Await() final { return details_->Await(); }
+   Awaitable& VAwait() final { return details_->VAwait(); }
 
    Promise(std::unique_ptr<Details> details)
       : details_(std::move(details)) {}
@@ -241,8 +296,10 @@ private:
 
    friend Details;
    friend typename Details::PromiseType;
-   template <class, bool> friend class ::promise::details::Promise;
+   template <class, bool>
+   friend class ::promise::details::Promise;
 };
 
-template <class T = void> using Resolve = promise::Resolve<T>;
-using Reject                            = promise::Reject;
+template <class T = void>
+using Resolve = promise::Resolve<T>;
+using Reject  = promise::Reject;

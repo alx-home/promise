@@ -90,10 +90,17 @@ MakePromise(FUN&& func, ARGS&&... args) {
    return MakePromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);
 }
 
-template <class EXCEPTION, class FUN, class... ARGS>
-void
-MakeReject(FUN const& reject, ARGS&&... args) {
-   reject(std::make_exception_ptr(EXCEPTION{std::forward<ARGS>(args)...}));
+template <class EXCEPTION, bool RELAXED, class... ARGS>
+bool
+MakeReject(promise::Reject const& reject, ARGS&&... args) {
+   if (!reject(std::make_exception_ptr(EXCEPTION{std::forward<ARGS>(args)...}))) {
+      if constexpr (!RELAXED) {
+         throw promise::Exception("Promise Already rejected !");
+      }
+      return false;
+   }
+
+   return true;
 }
 
 namespace promise {
@@ -101,7 +108,31 @@ struct Terminate : std::runtime_error {
    using std::runtime_error::runtime_error;
 };
 
-template <class T, bool WITH_RESOLVER> struct Resolver {
+template <class T>
+   requires(!std::is_void_v<T>)
+Resolve<T>::Resolve(std::function<void(T const&)> impl)
+   : impl_(std::move(impl)) {}
+
+template <class T>
+   requires(!std::is_void_v<T>)
+bool
+Resolve<T>::operator()(T const& value) const {
+   if (!resolved_.exchange(true)) {
+      impl_(value);
+      return true;
+   }
+
+   return false;
+}
+
+template <class T>
+   requires(!std::is_void_v<T>)
+Resolve<T>::operator bool() const {
+   return resolved_;
+}
+
+template <class T, bool WITH_RESOLVER>
+struct Resolver {
    details::Promise<T, WITH_RESOLVER>* promise_{nullptr};
    std::exception_ptr                  exception_{};
 
@@ -139,7 +170,8 @@ template <class T, bool WITH_RESOLVER> struct Resolver {
    }
 };
 
-template <bool WITH_RESOLVER> struct Resolver<void, WITH_RESOLVER> {
+template <bool WITH_RESOLVER>
+struct Resolver<void, WITH_RESOLVER> {
    details::Promise<void, WITH_RESOLVER>* promise_{nullptr};
 
    bool               resolved_{false};
@@ -179,34 +211,40 @@ using Lock = std::variant<
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
-template <class T, bool VOID_TYPE> struct ValuePromise : VPromise {
+template <class T, bool VOID_TYPE>
+struct ValuePromise : VPromise {
 protected:
    static constexpr bool IS_VOID = VOID_TYPE;
 
 public:
-   template <class SELF> auto const& GetValue(this SELF&& self, Lock) {
+   template <class SELF>
+   auto const& GetValue(this SELF&& self, Lock) {
       assert(self.resolver_);
       assert(self.resolver_->value_);
       return *self.resolver_->value_;
    }
 
-   template <class SELF> auto const& GetValue(this SELF&& self) {
+   template <class SELF>
+   auto const& GetValue(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
    }
 
-   template <class SELF> bool IsResolved(this SELF&& self, Lock) {
+   template <class SELF>
+   bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
       return self.resolver_->value_ != nullptr;
    }
 };
 
-template <class T> struct ValuePromise<T, true> : VPromise {
+template <class T>
+struct ValuePromise<T, true> : VPromise {
 protected:
    static constexpr bool IS_VOID = true;
 
 public:
-   template <class SELF> bool IsResolved(this SELF&& self, Lock) {
+   template <class SELF>
+   bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
       return self.resolver_->resolved_;
    }
@@ -227,7 +265,8 @@ struct Refcount {
 };
 #endif  // PROMISE_MEMCHECK
 
-template <class T, bool WITH_RESOLVER> struct Handle : public ValuePromise<T, std::is_void_v<T>> {
+template <class T, bool WITH_RESOLVER>
+struct Handle : public ValuePromise<T, std::is_void_v<T>> {
 protected:
    friend class ::Promise<T, WITH_RESOLVER>;
 
@@ -249,7 +288,10 @@ protected:
 
    struct VoidPromiseType {
    public:
-      template <class SELF> void return_void(this SELF&& self) { self.ReturnImpl(); }
+      template <class SELF>
+      void return_void(this SELF&& self) {
+         self.ReturnImpl();
+      }
    };
 
    struct ValuePromiseType {
@@ -322,7 +364,8 @@ protected:
       }
 
       friend Promise;
-      template <bool> friend struct AwaitTransform;
+      template <bool>
+      friend struct AwaitTransform;
       friend Handle;
    };
 
@@ -335,15 +378,18 @@ protected:
    }
 
 public:
-   template <class SELF> bool IsResolved(this SELF&& self, Lock lock) {
+   template <class SELF>
+   bool IsResolved(this SELF&& self, Lock lock) {
       return self.ValuePromise::IsResolved(lock);
    }
 
-   template <class SELF> bool IsDone(this SELF&& self, Lock lock) {
+   template <class SELF>
+   bool IsDone(this SELF&& self, Lock lock) {
       return self.ValuePromise::IsResolved(lock) || self.resolver_->exception_;
    }
 
-   template <class SELF> bool IsDone(this SELF&& self) {
+   template <class SELF>
+   bool IsDone(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.IsDone(lock);
    }
@@ -383,6 +429,8 @@ public:
 
       return *self;
    }
+
+   void VDetach() && override { assert(false); }
 
    ~Handle() { assert(!this->handle_); }
 
@@ -485,7 +533,7 @@ public:
    }
 
 private:
-   VPromise::Awaitable& Await() final {
+   VPromise::Awaitable& VAwait() final {
       struct Awaitable
          : VPromise::Awaitable
 #ifdef PROMISE_MEMCHECK
@@ -550,7 +598,8 @@ private:
       }
    }
 
-   template <class FUN, class... ARGS> constexpr auto Then(FUN&& func, ARGS&&... args) & {
+   template <class FUN, class... ARGS>
+   constexpr auto Then(FUN&& func, ARGS&&... args) & {
       // Promise return type
       using T2 = return_t<return_t<FUN>>;
 
@@ -589,7 +638,8 @@ private:
         .Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
-   template <class FUN, class... ARGS> constexpr auto Catch(FUN&& func, ARGS&&... args) & {
+   template <class FUN, class... ARGS>
+   constexpr auto Catch(FUN&& func, ARGS&&... args) & {
       // Promise return type
       using promise_t = return_t<decltype(std::function{func})>;
       using T2        = return_t<promise_t>;
@@ -690,7 +740,8 @@ private:
         .Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
-   template <class... ARGS> static constexpr auto Resolve(ARGS&&... args) {
+   template <class... ARGS>
+   static constexpr auto Resolve(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
       auto                        resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
@@ -703,7 +754,8 @@ private:
       return promise;
    }
 
-   template <class... ARGS> static constexpr auto Reject(ARGS&&... args) {
+   template <class... ARGS>
+   static constexpr auto Reject(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
       auto                        resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
@@ -717,7 +769,8 @@ private:
    }
 
 public:
-   template <class FUN, class... ARGS> static constexpr auto Create(FUN&& func, ARGS&&... args) {
+   template <class FUN, class... ARGS>
+   static constexpr auto Create(FUN&& func, ARGS&&... args) {
 
       struct FunctionImpl : Function {
          explicit FunctionImpl(std::remove_cvref_t<FUN>&& value)
@@ -755,7 +808,8 @@ private:
    std::vector<std::coroutine_handle<>> awaiters_{};
 
    friend Handle<T, WITH_RESOLVER>;
-   template <bool> friend struct AwaitTransform;
+   template <bool>
+   friend struct AwaitTransform;
 };
 }  // namespace details
 
