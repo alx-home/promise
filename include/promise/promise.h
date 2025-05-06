@@ -183,6 +183,14 @@ template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
 static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
 
+template <class FUN, class... ARGS>
+   requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
+static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
+
+template <class FUN, class... ARGS>
+   requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
+static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
+
 template <class EXCEPTION, bool RELAXED = true, class... ARGS>
 bool MakeReject(promise::Reject const& reject, ARGS&&... args);
 namespace promise {

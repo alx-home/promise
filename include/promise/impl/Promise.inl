@@ -807,7 +807,7 @@ private:
    }
 
 public:
-   template <class FUN, class... ARGS>
+   template <bool RPROMISE, class FUN, class... ARGS>
    static constexpr auto Create(FUN&& func, ARGS&&... args) {
 
       struct FunctionImpl : Function {
@@ -821,6 +821,9 @@ public:
       };
       auto holder   = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
       auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+
+      auto& resolve = resolver->resolve_;
+      auto& reject  = resolver->resolve_;
 
       auto promise = [&]() constexpr {
          if constexpr (WITH_RESOLVER) {
@@ -837,7 +840,12 @@ public:
       details->function_ = std::move(holder);
 
       promise.details_->handle_();
-      return promise;
+
+      if constexpr (RPROMISE) {
+         return std::make_tuple(promise, &resolve, &reject);
+      } else {
+         return promise;
+      }
    }
 
 private:
@@ -904,9 +912,27 @@ static constexpr auto
 MakePromise(FUN&& func, ARGS&&... args) {
    using namespace promise;
 
-   return details::Promise<return_t<return_t<FUN>>, WITH_RESOLVER<FUN>>::Create(
+   return details::Promise<return_t<return_t<FUN>>, WITH_RESOLVER<FUN>>::template Create<false>(
      std::forward<FUN>(func), std::forward<ARGS>(args)...
    );
+}
+
+template <class FUN, class... ARGS>
+   requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
+static constexpr auto
+MakeRPromise(FUN&& func, ARGS&&... args) {
+   using namespace promise;
+
+   return details::Promise<return_t<return_t<FUN>>, WITH_RESOLVER<FUN>>::template Create<true>(
+     std::forward<FUN>(func), std::forward<ARGS>(args)...
+   );
+}
+
+template <class FUN, class... ARGS>
+   requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
+static constexpr auto
+MakeRPromise(FUN&& func, ARGS&&... args) {
+   return MakeRPromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);
 }
 
 template <class T>
