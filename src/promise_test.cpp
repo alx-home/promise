@@ -97,6 +97,15 @@ main() {
                 .Then([]() -> Promise<int> { co_return 800; }),
             };
 
+            auto [prom_pure, resolve, reject] = promise::Pure<int>();
+
+            auto prom_pure_wait{MakePromise([&prom_pure]() -> Promise<int> {
+               co_return co_await prom_pure;
+            })};
+            (*resolve)(888);
+
+            std::cout << "pure " << co_await prom_pure_wait << std::endl;
+
             auto prom_int{prom2
                             .Then([](int value) -> Promise<double> {
                                throw std::runtime_error("test");

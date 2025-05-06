@@ -24,6 +24,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <cassert>
 #include <coroutine>
 #include <exception>
 #include <functional>
@@ -31,6 +32,7 @@ SOFTWARE.
 #include <shared_mutex>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 template <class T = void, bool WITH_RESOLVER = false>
 class Promise;
@@ -183,14 +185,20 @@ static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
 
 template <class EXCEPTION, bool RELAXED = true, class... ARGS>
 bool MakeReject(promise::Reject const& reject, ARGS&&... args);
-
 namespace promise {
+
+template <class T>
+static constexpr auto Pure();
+
 template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
 namespace details {
 template <class T, bool WITH_RESOLVER>
 class Promise;
 }
+
+template <class T, bool WITH_RESOLVER = true>
+struct Resolver;
 }  // namespace promise
 
 #include "impl/Promise.inl"
@@ -216,7 +224,30 @@ public:
       return details_->await_resume();
    }
 
-   auto operator()() { return (*details_)(); }
+   template <class SELF>
+      requires(!WITH_RESOLVER)
+   auto&& operator()(this SELF&& self) {
+      (*self.details_)();
+
+      if constexpr (std::is_lvalue_reference_v<SELF>) {
+         return self;
+      } else {
+         return std::move(self).Detach();
+      }
+   }
+
+   template <class SELF>
+      requires(WITH_RESOLVER)
+   auto&&
+   operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T, WITH_RESOLVER>>&& resolver) {
+      (*self.details_)(std::move(resolver));
+
+      if constexpr (std::is_lvalue_reference_v<SELF>) {
+         return self;
+      } else {
+         return std::move(self).Detach();
+      }
+   }
 
    bool Done() noexcept(false) {
       assert(details_);

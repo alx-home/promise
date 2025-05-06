@@ -37,6 +37,7 @@ SOFTWARE.
 #include <optional>
 #include <shared_mutex>
 #include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -557,7 +558,18 @@ public:
    }
 
 private:
-   auto operator()() { return this->handle_(); }
+   template <class...>
+      requires(!WITH_RESOLVER)
+   auto operator()() {
+      return this->handle_();
+   }
+
+   template <class...>
+      requires(WITH_RESOLVER)
+   auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
+      this->resolver_ = std::move(resolver);
+      return this->handle_();
+   }
 
    VPromise::Awaitable& VAwait() final {
       struct Awaitable
@@ -896,3 +908,26 @@ MakePromise(FUN&& func, ARGS&&... args) {
      std::forward<FUN>(func), std::forward<ARGS>(args)...
    );
 }
+
+template <class T>
+static constexpr auto
+MakeResolver() {
+   auto  resolver = std::make_unique<promise::Resolver<T, true>>();
+   auto& resolve  = resolver->resolve_;
+   auto& reject   = resolver->reject_;
+   return std::make_tuple(std::move(resolver), &resolve, &reject);
+}
+
+namespace promise {
+
+template <class T>
+static constexpr auto
+Pure() {
+   auto [resolver, resolve, reject] = MakeResolver<T>();
+   auto promise =
+     ([](Resolve<T> const&, Reject const&) -> ::Promise<T, true> { co_return; }(*resolve, *reject));
+
+   return std::make_tuple(std::move(promise(std::move(resolver))), resolve, reject);
+}
+
+}  // namespace promise
