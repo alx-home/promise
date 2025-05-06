@@ -216,6 +216,8 @@ public:
       return details_->await_resume();
    }
 
+   auto operator()() { return (*details_)(); }
+
    bool Done() noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};

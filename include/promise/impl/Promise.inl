@@ -325,10 +325,34 @@ protected:
 
       Parent* GetParent() const { return parent_; }
 
-      using init_suspend_t  = std::suspend_always;
-      using final_suspend_t = std::suspend_never;
-      init_suspend_t  initial_suspend() { return {}; }
-      final_suspend_t final_suspend() noexcept {
+      struct InitSuspend {
+         Parent& self_;
+
+         [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
+
+         constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
+         constexpr void await_resume() const noexcept(false) {
+            if (!self_.resolver_) {
+               // Promise has been created without MakePromise
+
+               if (WITH_RESOLVER) {
+                  throw std::runtime_error("Promise with resolver must be created with MakePromise"
+                  );
+               }
+
+               self_.resolver_ = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+            }
+
+            self_.resolver_->promise_ = &self_;
+         }
+      };
+      using FinalSuspend = std::suspend_never;
+      InitSuspend initial_suspend() {
+         assert(this->parent_);
+         return {.self_ = *this->parent_};
+      }
+
+      FinalSuspend final_suspend() noexcept {
          auto const parent = this->parent_;
 
          std::unique_lock lock{parent->mutex_};
@@ -533,6 +557,8 @@ public:
    }
 
 private:
+   auto operator()() { return this->handle_(); }
+
    VPromise::Awaitable& VAwait() final {
       struct Awaitable
          : VPromise::Awaitable
@@ -795,7 +821,6 @@ public:
       }();
 
       auto const details = promise.details_.get();
-      resolver->promise_ = details;
       details->resolver_ = std::move(resolver);
       details->function_ = std::move(holder);
 
