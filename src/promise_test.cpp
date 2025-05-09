@@ -136,7 +136,8 @@ main() {
                               [](
                                 Resolve<int> const& resolve, Reject const&, double value
                               ) -> Promise<int, true> {
-                                 auto result = resolve(static_cast<int>(value) + 3);
+                                 [[maybe_unused]] auto result =
+                                   resolve(static_cast<int>(value) + 3);
                                  assert(result);
                                  co_return;
                               }
@@ -145,7 +146,7 @@ main() {
             auto prom3{
               MakePromise([&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
                  try {
-                    auto result = resolve((co_await prom2) + 5);
+                    [[maybe_unused]] auto result = resolve((co_await prom2) + 5);
                     assert(result);
                  } catch (std::runtime_error const& e) {
                     std::cout << "PP3 " << e.what() << std::endl;
@@ -163,7 +164,7 @@ main() {
                 })
                 .Then([]() -> Promise<void> { co_return; })
                 .Then([](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
-                   auto result = resolve(111);
+                   [[maybe_unused]] auto result = resolve(111);
                    assert(result);
                    co_return;
                 })
@@ -172,7 +173,7 @@ main() {
                     Resolve<void> const& resolve, Reject const&, int value
                   ) -> Promise<void, true> {
                      std::cout << value << std::endl;
-                     auto result = resolve();
+                     [[maybe_unused]] auto result = resolve();
                      assert(result);
                      co_return;
                   }
@@ -205,7 +206,7 @@ main() {
 
             std::this_thread::sleep_for(std::chrono::seconds(1));
             // MakeReject<std::runtime_error>(*rejecter, "titi");
-            auto result = (*resolver)(5);
+            [[maybe_unused]] auto result = (*resolver)(5);
             assert(result);
             co_await promall;
          } catch (std::exception const& e) {
