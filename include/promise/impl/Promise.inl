@@ -136,38 +136,49 @@ template <class T, bool WITH_RESOLVER>
 struct Resolver {
    details::Promise<T, WITH_RESOLVER>* promise_{nullptr};
    std::exception_ptr                  exception_{};
+   std::atomic<bool>                   resolved_{false};
 
    // unique_ptr to handle std::optional<std::optional>...
    std::unique_ptr<T> value_{};
    Resolve<T>         resolve_{[this](T const& value) { this->Resolve(value); }};
    Reject             reject_{[this](std::exception_ptr exc) { this->Reject(std::move(exc)); }};
 
-   bool await_ready() const { return value_; }
+   bool await_ready() const { return resolved_; }
 
    void await_resume() const {}
 
    template <class TT>
       requires(std::is_convertible_v<TT, T>)
-   void Resolve(TT&& value) {
-      std::unique_lock lock{promise_->mutex_};
+   bool Resolve(TT&& value) {
+      if (!resolved_.exchange(true)) {
+         std::unique_lock lock{promise_->mutex_};
 
-      assert(!value_);
-      assert(!exception_);
-      value_ = std::make_unique<T>(std::forward<TT>(value));
+         assert(!value_);
+         assert(!exception_);
+         value_ = std::make_unique<T>(std::forward<TT>(value));
 
-      assert(promise_);
-      promise_->OnResolved(lock);
+         assert(promise_);
+         promise_->OnResolved(lock);
+         return true;
+      }
+
+      return false;
    }
 
-   void Reject(std::exception_ptr exception) {
-      std::unique_lock lock{promise_->mutex_};
+   bool Reject(std::exception_ptr exception) {
+      if (!resolved_.exchange(true)) {
+         std::unique_lock lock{promise_->mutex_};
 
-      assert(!value_);
-      assert(!exception_);
-      exception_ = std::move(exception);
+         assert(!value_);
+         assert(!exception_);
+         exception_ = std::move(exception);
 
-      assert(promise_);
-      promise_->OnResolved(lock);
+         assert(promise_);
+         promise_->OnResolved(lock);
+         return true;
+      }
+
+      return false;
    }
 };
 
@@ -175,7 +186,7 @@ template <bool WITH_RESOLVER>
 struct Resolver<void, WITH_RESOLVER> {
    details::Promise<void, WITH_RESOLVER>* promise_{nullptr};
 
-   bool               resolved_{false};
+   std::atomic<bool>  resolved_{false};
    std::exception_ptr exception_{};
    Resolve<void>      resolve_{[this]() { this->Resolve(); }};
    Reject             reject_{[this](std::exception_ptr exc) { this->Reject(exc); }};
@@ -184,26 +195,32 @@ struct Resolver<void, WITH_RESOLVER> {
 
    void await_resume() const {}
 
-   void Resolve() {
-      std::unique_lock lock{promise_->mutex_};
+   bool Resolve() {
+      if (!resolved_.exchange(true)) {
+         std::unique_lock lock{promise_->mutex_};
 
-      assert(!resolved_);
-      assert(!exception_);
-      resolved_ = true;
+         assert(!exception_);
+         assert(promise_);
+         promise_->OnResolved(lock);
+         return true;
+      }
 
-      assert(promise_);
-      promise_->OnResolved(lock);
+      return false;
    }
 
-   void Reject(std::exception_ptr exception) {
-      std::unique_lock lock{promise_->mutex_};
+   bool Reject(std::exception_ptr exception) {
+      if (!resolved_.exchange(true)) {
+         std::unique_lock lock{promise_->mutex_};
 
-      assert(!resolved_);
-      assert(!exception_);
-      exception_ = exception;
+         assert(!exception_);
+         exception_ = exception;
 
-      assert(promise_);
-      promise_->OnResolved(lock);
+         assert(promise_);
+         promise_->OnResolved(lock);
+         return true;
+      }
+
+      return false;
    }
 };
 
@@ -376,7 +393,12 @@ protected:
          std::lock_guard lock{parent->mutex_};
          assert(parent);
          assert(parent->resolver_);
-         parent->resolver_->exception_ = std::current_exception();
+
+         if (!parent->resolver_->resolved_.exchange(true)) {
+            parent->resolver_->exception_ = std::current_exception();
+         } else {
+            std::cerr << "Promise: Unhandled exception !" << std::endl;
+         }
       }
 
       template <class... FROM>
