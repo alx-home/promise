@@ -307,7 +307,8 @@ public:
 
    auto& Detach() && {
       assert(details_);
-      return details_->Detach(std::move(details_));
+      auto& details = *details_;
+      return details.Detach(std::move(details_));
    }
 
    void VDetach() && override { static_cast<Promise&&>(*this).Detach(); }
