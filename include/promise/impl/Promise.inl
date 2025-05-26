@@ -715,7 +715,8 @@ private:
       static_assert(std::tuple_size_v<FArgs> == 1, "Catch promise must have exactly one argument!");
       using Exception = std::tuple_element_t<0, FArgs>;
 
-      static constexpr bool IS_EXC_PTR = std::is_same_v<Exception, std::exception_ptr>;
+      static constexpr bool IS_EXC_PTR =
+        std::is_same_v<std::remove_cvref_t<Exception>, std::exception_ptr>;
       static constexpr bool IS_VALID_V =
         IS_EXC_PTR
         || (std::is_lvalue_reference_v<Exception> && std::is_const_v<std::remove_reference_t<Exception>>);
