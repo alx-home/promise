@@ -47,7 +47,7 @@ template <class T = void>
 struct Resolve;
 
 template <>
-struct Resolve<void> {
+struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
    Resolve(std::function<void()> impl);
 
    bool operator()() const;
@@ -60,7 +60,7 @@ private:
 
 template <class T>
    requires(!std::is_void_v<T>)
-struct Resolve<T> {
+struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
    Resolve(std::function<void(T const&)> impl);
 
    bool operator()(T const&) const;
@@ -71,7 +71,7 @@ private:
    mutable std::atomic<bool>     resolved_{false};
 };
 
-struct Reject {
+struct Reject : std::enable_shared_from_this<Reject> {
    Reject(std::function<void(std::exception_ptr)> impl);
 
    bool operator()(std::exception_ptr exception) const;

@@ -139,9 +139,13 @@ struct Resolver {
    std::atomic<bool>                   resolved_{false};
 
    // unique_ptr to handle std::optional<std::optional>...
-   std::unique_ptr<T> value_{};
-   Resolve<T>         resolve_{[this](T const& value) { this->Resolve(value); }};
-   Reject             reject_{[this](std::exception_ptr exc) { this->Reject(std::move(exc)); }};
+   std::unique_ptr<T>          value_{};
+   std::shared_ptr<Resolve<T>> resolve_{
+     std::make_shared<promise::Resolve<T>>([this](T const& value) { this->Resolve(value); })
+   };
+   std::shared_ptr<Reject> reject_{std::make_shared<promise::Reject>(
+     [this](std::exception_ptr exc) { this->Reject(std::move(exc)); }
+   )};
 
    bool await_ready() const { return resolved_; }
 
@@ -186,10 +190,13 @@ template <bool WITH_RESOLVER>
 struct Resolver<void, WITH_RESOLVER> {
    details::Promise<void, WITH_RESOLVER>* promise_{nullptr};
 
-   std::atomic<bool>  resolved_{false};
-   std::exception_ptr exception_{};
-   Resolve<void>      resolve_{[this]() { this->Resolve(); }};
-   Reject             reject_{[this](std::exception_ptr exc) { this->Reject(exc); }};
+   std::atomic<bool>              resolved_{false};
+   std::exception_ptr             exception_{};
+   std::shared_ptr<Resolve<void>> resolve_{std::make_shared<promise::Resolve<void>>([this]() {
+      this->Resolve();
+   })};
+   std::shared_ptr<Reject> reject_{std::make_shared<promise::Reject>([this](std::exception_ptr exc
+                                                                     ) { this->Reject(exc); })};
 
    bool await_ready() const { return resolved_; }
 
@@ -589,6 +596,7 @@ private:
    template <class...>
       requires(WITH_RESOLVER)
    auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
+      assert(!this->resolver_);
       this->resolver_ = std::move(resolver);
       return this->handle_();
    }
@@ -844,14 +852,12 @@ public:
       auto holder   = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
       auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
-      auto& resolve = resolver->resolve_;
-      auto& reject  = resolver->resolve_;
+      auto& resolve = *resolver->resolve_;
+      auto& reject  = *resolver->reject_;
 
       auto promise = [&]() constexpr {
          if constexpr (WITH_RESOLVER) {
-            return holder->func_(
-              resolver->resolve_, resolver->reject_, std::forward<ARGS>(args)...
-            );
+            return holder->func_(resolve, reject, std::forward<ARGS>(args)...);
          } else {
             return holder->func_(std::forward<ARGS>(args)...);
          }
@@ -960,10 +966,8 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
 template <class T>
 static constexpr auto
 MakeResolver() {
-   auto  resolver = std::make_unique<promise::Resolver<T, true>>();
-   auto& resolve  = resolver->resolve_;
-   auto& reject   = resolver->reject_;
-   return std::make_tuple(std::move(resolver), &resolve, &reject);
+   auto resolver = std::make_unique<promise::Resolver<T, true>>();
+   return std::make_tuple(std::move(resolver), resolver->resolve_, resolver->reject_);
 }
 
 namespace promise {
@@ -971,9 +975,10 @@ namespace promise {
 template <class T>
 static constexpr auto
 Pure() {
-   auto [resolver, resolve, reject] = MakeResolver<T>();
-   auto promise =
-     ([](Resolve<T> const&, Reject const&) -> ::Promise<T, true> { co_return; }(*resolve, *reject));
+   auto const [resolver, resolve, reject] = MakeResolver<T>();
+   auto promise = ([](Resolve<T> const&, Reject const&) -> ::Promise<T, true> {
+      co_return;
+   }(resolver.resolve, resolver.reject));
 
    return std::make_tuple(std::move(promise(std::move(resolver))), resolve, reject);
 }
