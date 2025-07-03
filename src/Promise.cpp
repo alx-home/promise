@@ -27,6 +27,10 @@ SOFTWARE.
 namespace promise {
 #ifdef PROMISE_MEMCHECK
 std::atomic<std::size_t> Refcount::counter{0};
+#   ifdef PROMISE_MEMCHECK_FULL
+std::unordered_set<VPromise const*> Refcount::ptrs{};
+std::mutex                          Refcount::mutex{};
+#   endif
 #endif  // PROMISE_MEMCHECK
 
 Reject::Reject(std::function<void(std::exception_ptr)> impl)

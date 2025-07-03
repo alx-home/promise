@@ -39,6 +39,7 @@ SOFTWARE.
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -290,15 +291,33 @@ public:
 #ifdef PROMISE_MEMCHECK
 struct Refcount {
    static std::atomic<std::size_t> counter;
+#   ifdef PROMISE_MEMCHECK_FULL
+   static std::unordered_set<VPromise const*> ptrs;
+   static std::mutex                          mutex;
+   VPromise*                                  ptr_;
+#   endif
 
-   constexpr Refcount() { ++counter; }
+   constexpr Refcount(VPromise* ptr) {
+      ++counter;
+#   ifdef PROMISE_MEMCHECK_FULL
+      std::lock_guard lock{mutex};
+      ptrs.emplace(ptr);
+      ptr_ = ptr;
+#   endif
+   }
 
    Refcount(Refcount&&) noexcept                 = delete;
    Refcount(Refcount const&) noexcept            = delete;
    Refcount& operator=(Refcount&&) noexcept      = delete;
    Refcount& operator=(Refcount const&) noexcept = delete;
 
-   ~Refcount() { --counter; }
+   ~Refcount() {
+      --counter;
+#   ifdef PROMISE_MEMCHECK_FULL
+      std::lock_guard lock{mutex};
+      ptrs.erase(ptr_);
+#   endif
+   }
 };
 #endif  // PROMISE_MEMCHECK
 
@@ -542,7 +561,13 @@ private:
    using Handle<T, WITH_RESOLVER>::Handle;
 
    explicit Promise(handle_type handle)
-      : Handle<T, WITH_RESOLVER>(std::move(handle)) {}
+      : Handle<T, WITH_RESOLVER>(std::move(handle))
+   //
+#ifdef PROMISE_MEMCHECK
+      , Refcount(this)
+#endif
+   {
+   }
 
 public:
    ~Promise() {
@@ -616,7 +641,13 @@ private:
       {
 
          Awaitable(details::Promise<T, WITH_RESOLVER>& self)
-            : self_(self) {}
+            :  //
+#ifdef PROMISE_MEMCHECK
+            Refcount(static_cast<VPromise*>(&self))
+            ,
+#endif
+            self_(self) {
+         }
 
          virtual ~Awaitable() = default;
 
@@ -930,6 +961,12 @@ Memcheck() {
          if (refcount) {
             std::cerr << "Promise: Leak memory detected (" << refcount << " unterminated promises)"
                       << std::endl;
+#   ifdef PROMISE_MEMCHECK_FULL
+            auto const& ptrs = Refcount::ptrs;
+            for (auto const& ptr : ptrs) {
+               std::cout << "At addr: " << ptr << std::endl;
+            }
+#   endif
             assert(false);
          }
       }
