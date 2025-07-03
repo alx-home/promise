@@ -160,6 +160,7 @@ using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 // For Handling a promise in a pointer
 struct VPromise {
    struct Awaitable {
+      virtual ~Awaitable()                                = default;
       virtual bool await_ready()                          = 0;
       virtual void await_resume()                         = 0;
       virtual void await_suspend(std::coroutine_handle<>) = 0;

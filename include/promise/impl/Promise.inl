@@ -639,7 +639,6 @@ private:
          , Refcount
 #endif
       {
-
          Awaitable(details::Promise<T, WITH_RESOLVER>& self)
             :  //
 #ifdef PROMISE_MEMCHECK
@@ -648,8 +647,6 @@ private:
 #endif
             self_(self) {
          }
-
-         virtual ~Awaitable() = default;
 
          bool await_ready() final { return self_.await_ready(); }
 
@@ -739,6 +736,7 @@ private:
 
    template <class FUN, class... ARGS>
    constexpr auto Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+      assert(self);
       return this->Detach(std::move(self))
         .Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
@@ -842,6 +840,7 @@ private:
 
    template <class FUN, class... ARGS>
    constexpr auto Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+      assert(self);
       return this->Detach(std::move(self))
         .Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
