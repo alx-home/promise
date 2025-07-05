@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include "../promise.h"
 
+#include <utils/Scoped.h>
 #include <algorithm>
 #include <cassert>
 #include <coroutine>
@@ -496,6 +497,7 @@ public:
    details::Promise<T, WITH_RESOLVER>& Detach(
      std::unique_ptr<details::Promise<T, WITH_RESOLVER>>&& self
    ) {
+      assert(self);
       std::unique_lock lock{self->mutex_};
       assert(!self->self_owned_);
 
@@ -737,8 +739,8 @@ private:
    template <class FUN, class... ARGS>
    constexpr auto Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
-      return this->Detach(std::move(self))
-        .Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      return self->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
    template <class FUN, class... ARGS>
@@ -841,8 +843,8 @@ private:
    template <class FUN, class... ARGS>
    constexpr auto Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
-      return this->Detach(std::move(self))
-        .Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
    template <class... ARGS>

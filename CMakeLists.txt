@@ -25,6 +25,8 @@ target_include_directories(alx-home_promise PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include/promise
 )
 
+target_link_libraries(alx-home_promise PUBLIC alx-home::cpp_utils)
+
 win32_executable(TARGET_NAME promise_test
     FILES
   src/promise_test.cpp
