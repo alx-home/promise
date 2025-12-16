@@ -54,8 +54,8 @@ struct ExceptionWrapper : std::exception_ptr {
 
    explicit(false) operator T&() {
       static_assert(
-        _MSC_VER == 1943,
-        "Only tested on msvc 2022, with other "
+        _MSC_VER == 1943 || _MSC_VER == 1929,
+        "Only tested on msvc 2022/2019, with other "
         "compiler use it at your own risk!"
       );
 
@@ -298,7 +298,7 @@ struct Refcount {
    VPromise*                                  ptr_;
 #   endif
 
-   constexpr Refcount(VPromise* ptr) {
+   explicit Refcount(VPromise* ptr) {
       ++counter;
 #   ifdef PROMISE_MEMCHECK_FULL
       std::lock_guard lock{mutex};
