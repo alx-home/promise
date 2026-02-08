@@ -106,6 +106,12 @@ MakeReject(promise::Reject const& reject, ARGS&&... args) {
    return true;
 }
 
+template <class PROMISE, class EXCEPTION, class... ARGS>
+auto
+MakeReject(ARGS&&... args) {
+   return PROMISE::Reject(std::make_exception_ptr(EXCEPTION{std::forward<ARGS>(args)...}));
+}
+
 namespace promise {
 struct Terminate : std::runtime_error {
    using std::runtime_error::runtime_error;
