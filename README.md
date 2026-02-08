@@ -177,6 +177,25 @@ Catch argument rules:
 	the only place using compiler-specific exception layout to extract typed exceptions from
 	`std::exception_ptr`.
 
+You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
+Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
+
+```cpp
+#include <promise/promise.h>
+
+Promise<int> MightFail();
+
+Promise<void> Demo() {
+	try {
+		auto value = co_await MightFail();
+		(void)value;
+	} catch (const std::exception& ex) {
+		(void)ex;
+	}
+	co_return;
+}
+```
+
 Then argument rules:
 
 - The value passed to `Then` shall be taken by const reference when it is a value type
