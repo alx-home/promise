@@ -130,6 +130,10 @@ Catch argument rules:
 	catch block. It currently relies on MSVC internals and is only supported on specific MSVC
 	versions.
 - Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
+- To support other compilers/versions, update the `ExceptionWrapper` implementation in
+	`include/promise/impl/Promise.inl` (the block guarded by the `_MSC_VER` static assert). That is
+	the only place using compiler-specific exception layout to extract typed exceptions from
+	`std::exception_ptr`.
 
 Then argument rules:
 
