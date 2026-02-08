@@ -138,6 +138,8 @@ auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promis
 });
 
 auto value = co_await prom;
+```
+
 ## Using resolvers outside the coroutine scope
 
 Resolvers can be stored and used later (for example from another thread or callback). The
