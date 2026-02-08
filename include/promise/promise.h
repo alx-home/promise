@@ -273,7 +273,15 @@ public:
       return details_->IsDone(lock);
    }
 
-   std::exception_ptr Exception() {
+   auto Value() const noexcept(false) {
+      assert(details_);
+      std::shared_lock lock{details_->mutex_};
+
+      assert(details_->IsDone(lock));
+      return details_->GetValue(lock);
+   }
+
+   std::exception_ptr Exception() const noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};
       return details_->GetException(lock);
