@@ -84,6 +84,7 @@ auto [prom2, resolve2, reject2] = MakeRPromise(
 
 auto ok = Promise<int>::Resolve(5);
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
+auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
 ```
 
 ## Forwarding arguments into `MakePromise`
@@ -182,8 +183,10 @@ auto ok = Promise<int>::Resolve(5);
 auto value = co_await ok;
 
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
+auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
 try {
 	(void)co_await err;
+   (void)co_await err2;
 } catch (std::exception const&) {
 	// Handle error
 }
@@ -303,14 +306,14 @@ Catch argument rules:
 - A `Catch(std::exception_ptr)` handler always runs for any thrown exception.
 - A `Catch(const T&)` handler runs only when the exception is dynamically castable to `T`.
 - This typed `Catch(const T&)` behavior is a bit hacky: C++ has no standard way to cast an
-	`std::exception_ptr`, and you cannot both `rethrow_exception` and `co_await` in the same
-	catch block. It currently relies on MSVC internals and is only supported on specific MSVC
-	versions.
+  `std::exception_ptr`, and you cannot both `rethrow_exception` and `co_await` in the same
+  catch block. It currently relies on MSVC internals and is only supported on specific MSVC
+  versions.
 - Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
 - To support other compilers/versions, update the `ExceptionWrapper` implementation in
-	`include/promise/impl/Promise.inl` (the block guarded by the `_MSC_VER` static assert). That is
-	the only place using compiler-specific exception layout to extract typed exceptions from
-	`std::exception_ptr`.
+  `include/promise/impl/Promise.inl` (the block guarded by the `_MSC_VER` static assert). That is
+  the only place using compiler-specific exception layout to extract typed exceptions from
+  `std::exception_ptr`.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
@@ -334,7 +337,7 @@ Promise<void> Demo() {
 Then argument rules:
 
 - The value passed to `Then` shall be taken by const reference when it is a value type
-	(for example `const T&`, `const std::optional<T>&`, or `const std::variant<...>&`).
+  (for example `const T&`, `const std::optional<T>&`, or `const std::variant<...>&`).
 - The same const-reference rule applies to `Catch` when its argument is a typed exception.
 
 Value type rules for a `Catch` block:
@@ -403,9 +406,9 @@ if (prom.Done()) {
 Warnings:
 
 - Calling `Value()` or `Exception()` before the promise is done is invalid and will assert or
-	throw, depending on build/runtime checks.
+  throw, depending on build/runtime checks.
 - `Value()` is only valid for resolved promises; `Exception()` is only meaningful for rejected
-	promises. Prefer `co_await` or `Then`/`Catch` for correct flow.
+  promises. Prefer `co_await` or `Then`/`Catch` for correct flow.
 
 ## Detach
 
