@@ -87,11 +87,11 @@ main() {
               MakePromise([&]() -> Promise<int> { co_return 0; })
                 .Then([](int value) -> Promise<int> { co_return value + 3; })
                 .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
-                .Then([](std::optional<int>) -> Promise<int> { co_return 0; })
+                .Then([](std::optional<int> const&) -> Promise<int> { co_return 0; })
                 .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
                 .Then([](int) -> Promise<void> { co_return; })
                 .Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
-                .Then([](std::optional<int>) -> Promise<void> { co_return; })
+                .Then([](std::optional<int> const&) -> Promise<void> { co_return; })
                 .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
                 .Then([]() -> Promise<void> { co_return; })
                 .Then([]() -> Promise<int> { co_return 800; }),
@@ -120,7 +120,7 @@ main() {
                                std::cout << "test caught" << std::endl;
                                co_return 300;
                             })
-                            .Then([](std::variant<int, double> value) -> Promise<double> {
+                            .Then([](std::variant<int, double> const& value) -> Promise<double> {
                                std::cout << "test2 uncaught" << std::endl;
                                throw std::runtime_error("test3");
                                co_return std::holds_alternative<int>(value)

@@ -122,6 +122,19 @@ the next `Then` or returned by `co_await`.
 Catch argument rules:
 
 - A `Catch` handler must take exactly one argument: `std::exception_ptr` or `const Exception&`.
+- Using a specific exception type by const reference behaves like `try { } catch (const T&) { }`.
+- A `Catch(std::exception_ptr)` handler always runs for any thrown exception.
+- A `Catch(const T&)` handler runs only when the exception is dynamically castable to `T`.
+- This typed `Catch(const T&)` behavior is a bit hacky: C++ has no standard way to cast an
+	`std::exception_ptr`, and you cannot both `rethrow_exception` and `co_await` in the same
+	catch block. It currently relies on MSVC internals and is only supported on specific MSVC
+	versions.
+- Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
+
+Then argument rules:
+
+- The value passed to `Then` must be taken by const reference when it is a value type
+	(for example `const T&`, `const std::optional<T>&`, or `const std::variant<...>&`).
 
 Value type rules for a `Catch` block:
 
