@@ -2,10 +2,10 @@
 
 # alx-home promise
 
-Coroutine-based Promise implementation for C++20. It supports chaining with `Then`, error handling
-with `Catch`, finalization with `Finally`, and resolver-style promises when you need to resolve or
-reject from the outside.
-The goal is to mirror JavaScript Promise behavior and ergonomics in C++.
+Coroutine-native Promise implementation for C++20 with a JavaScript-like feel. Chain `Then`,
+recover with `Catch`, and clean up with `Finally`, all with minimal boilerplate and clear flow.
+Use resolver-style promises when you need explicit control, while keeping the ergonomics of JS
+Promises in modern C++.
 
 ## Features
 
