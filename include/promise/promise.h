@@ -315,6 +315,21 @@ public:
       }
    }
 
+   template <class FUN, class SELF>
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   Finally(this SELF&& self, FUN&& func) {
+      assert(self.details_);
+
+      if constexpr (std::is_lvalue_reference_v<SELF>) {
+         return self.details_->Finally(std::forward<FUN>(func));
+
+      } else {
+         // Transfer ownership to next promise
+         return static_cast<Details&&>(*self.details_)
+           .Finally(std::move(self.details_), std::forward<FUN>(func));
+      }
+   }
+
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
       return Details::Promise::Resolve(std::forward<ARGS>(args)...);

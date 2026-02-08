@@ -933,6 +933,145 @@ private:
       return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
+   template <class FUN, class... ARGS>
+   [[nodiscard]] constexpr auto Finally(FUN&& func) & {
+      if constexpr (!promise::WITH_RESOLVER<FUN>) {
+         // Optimisation skip coroutine frame creation
+
+         if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
+            if constexpr (!IS_PROMISE<FUN>) {
+               try {
+                  func();
+
+                  if constexpr (IS_VOID) {
+                     return Promise<T, WITH_RESOLVER>::Resolve();
+                  } else {
+                     return Promise<T, WITH_RESOLVER>::Resolve(this->GetValue(lock));
+                  }
+               } catch (...) {
+                  return Promise<T, WITH_RESOLVER>::Reject(std::current_exception());
+               }
+            } else if constexpr (IS_VOID) {
+               using promise_t = return_t<decltype(std::function{func})>;
+               using T2        = return_t<promise_t>;
+               if constexpr (std::is_void_v<T2>) {
+                  return ::MakePromise(std::move(func)).Then([]() constexpr {});
+               } else {
+                  return ::MakePromise(std::move(func)).Then([](T2 const&) constexpr {});
+               }
+            } else {
+               using promise_t = return_t<decltype(std::function{func})>;
+               using T2        = return_t<promise_t>;
+               if constexpr (std::is_void_v<T2>) {
+                  return ::MakePromise(std::move(func))
+                    .Then([value = this->GetValue(lock)]() constexpr { return value; });
+               } else {
+                  return ::MakePromise(std::move(func))
+                    .Then([value = this->GetValue(lock)](T2 const&) constexpr { return value; });
+               }
+            }
+         }
+      }  // else @todo
+
+      if constexpr (IS_PROMISE<FUN>) {
+         return ::MakePromise(
+           [func = std::forward<FUN>(func)](
+             promise::Resolve<T> const& resolve,
+             promise::Reject const&     reject,
+             Promise<T, WITH_RESOLVER>& self
+           ) -> ::Promise<T, true> {
+              if constexpr (IS_VOID) {
+                 std::exception_ptr exception;
+                 try {
+                    co_await self;
+                    resolve();
+                 } catch (...) {
+                    exception = std::current_exception();
+                 }
+                 co_await ::MakePromise(std::move(func));
+
+                 if (exception) {
+                    reject(exception);
+                 }
+                 co_return;
+              } else {
+                 std::exception_ptr exception;
+                 bool               prom_exception = true;
+
+                 try {
+                    auto result    = co_await self;
+                    prom_exception = false;
+                    co_await ::MakePromise(std::move(func));
+                    resolve(result);
+                 } catch (...) {
+                    exception = std::current_exception();
+                 }
+
+                 assert(exception);
+                 if (prom_exception) {
+                    // If the exception come from the promise, we want to call func before
+                    // rethrowing it
+                    co_await ::MakePromise(std::move(func));
+                 }
+
+                 reject(exception);
+                 co_return;
+              }
+           },
+           *this
+         );
+      } else {
+         return ::MakePromise(
+           [func = std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self
+           ) -> ::Promise<T, WITH_RESOLVER> {
+              std::exception_ptr exception;
+
+              if constexpr (IS_VOID) {
+                 try {
+                    co_await self;
+                 } catch (...) {
+                    exception = std::current_exception();
+                 }
+
+                 func();
+
+                 if (exception) {
+                    std::rethrow_exception(exception);
+                 }
+                 co_return;
+              } else {
+                 bool prom_exception = true;
+                 try {
+                    auto result    = co_await self;
+                    prom_exception = false;
+                    func();
+
+                    co_return result;
+                 } catch (...) {
+                    exception = std::current_exception();
+                 }
+
+                 if (prom_exception) {
+                    // If the exception come from the promise, we want to call func before
+                    // rethrowing it
+                    func();
+                 }
+
+                 std::rethrow_exception(exception);
+              }
+           },
+           *this
+         );
+      }
+   }
+
+   template <class FUN>
+   [[nodiscard]] constexpr auto Finally(std::shared_ptr<Promise>&& self, FUN&& func) && {
+      assert(self);
+      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      return self->Finally(std::forward<FUN>(func));
+   }
+
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
