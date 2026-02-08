@@ -944,12 +944,12 @@ private:
                   func();
 
                   if constexpr (IS_VOID) {
-                     return Promise<T, WITH_RESOLVER>::Resolve();
+                     return Promise<T, true>::Resolve();
                   } else {
-                     return Promise<T, WITH_RESOLVER>::Resolve(this->GetValue(lock));
+                     return Promise<T, true>::Resolve(this->GetValue(lock));
                   }
                } catch (...) {
-                  return Promise<T, WITH_RESOLVER>::Reject(std::current_exception());
+                  return Promise<T, true>::Reject(std::current_exception());
                }
             } else if constexpr (IS_VOID) {
                using promise_t = return_t<decltype(std::function{func})>;
@@ -984,7 +984,6 @@ private:
                  std::exception_ptr exception;
                  try {
                     co_await self;
-                    resolve();
                  } catch (...) {
                     exception = std::current_exception();
                  }
@@ -992,6 +991,8 @@ private:
 
                  if (exception) {
                     reject(exception);
+                 } else {
+                    resolve();
                  }
                  co_return;
               } else {
@@ -1022,8 +1023,11 @@ private:
          );
       } else {
          return ::MakePromise(
-           [func = std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self
-           ) -> ::Promise<T, WITH_RESOLVER> {
+           [func = std::forward<FUN>(func)](
+             promise::Resolve<T> const& resolve,
+             promise::Reject const&     reject,
+             Promise<T, WITH_RESOLVER>& self
+           ) -> ::Promise<T, true> {
               std::exception_ptr exception;
 
               if constexpr (IS_VOID) {
@@ -1036,7 +1040,9 @@ private:
                  func();
 
                  if (exception) {
-                    std::rethrow_exception(exception);
+                    reject(exception);
+                 } else {
+                    resolve();
                  }
                  co_return;
               } else {
@@ -1046,7 +1052,8 @@ private:
                     prom_exception = false;
                     func();
 
-                    co_return result;
+                    resolve(result);
+                    co_return;
                  } catch (...) {
                     exception = std::current_exception();
                  }
@@ -1057,7 +1064,7 @@ private:
                     func();
                  }
 
-                 std::rethrow_exception(exception);
+                 reject(exception);
               }
            },
            *this
@@ -1072,6 +1079,7 @@ private:
       return self->Finally(std::forward<FUN>(func));
    }
 
+public:
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
@@ -1100,7 +1108,6 @@ private:
       return promise;
    }
 
-public:
    template <bool RPROMISE, class FUN, class... ARGS>
    static constexpr auto Create(FUN&& func, ARGS&&... args) {
 
