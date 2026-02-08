@@ -58,7 +58,7 @@ Promise<void> Demo() {
 }
 ```
 
-## Helper utilities
+## Quick Card
 
 ```cpp
 #include <promise/promise.h>
