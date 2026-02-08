@@ -1004,6 +1004,7 @@ private:
                     prom_exception = false;
                     co_await ::MakePromise(std::move(func));
                     resolve(result);
+                    co_return;
                  } catch (...) {
                     exception = std::current_exception();
                  }
