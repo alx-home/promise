@@ -1162,10 +1162,10 @@ template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
    return MakePromise(
-     [](PROMISE&&... promise) -> ::Promise<std::tuple<std::conditional_t<
-                                std::is_void_v<return_t<PROMISE>>,
-                                std::nullopt_t,
-                                return_t<PROMISE>>...>> {
+     [promise...]() mutable -> ::Promise<std::tuple<std::conditional_t<
+                              std::is_void_v<return_t<PROMISE>>,
+                              std::nullopt_t,
+                              return_t<PROMISE>>...>> {
         co_return std::make_tuple(([]<class... RESULT>(RESULT... result) constexpr {
            if constexpr (sizeof...(RESULT)) {
               return result...[0];
@@ -1173,8 +1173,7 @@ All(PROMISE&&... promise) {
               return std::nullopt;
            }
         }(co_await promise))...);
-     },
-     std::forward<PROMISE>(promise)...
+     }
    );
 }
 
