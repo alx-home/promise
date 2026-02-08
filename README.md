@@ -140,6 +140,22 @@ auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promis
 auto value = co_await prom;
 ```
 
+Using `MakeRPromise` (promise + resolver tuple):
+
+```cpp
+#include <promise/promise.h>
+
+auto [prom, resolve, reject] = MakeRPromise(
+	[](Resolve<int> const&, Reject const&) -> Promise<int, true> { co_return; }
+);
+
+StartAsyncWork([resolve]() {
+	(*resolve)(99);
+});
+
+auto value = co_await prom;
+```
+
 ## Using resolvers outside the coroutine scope
 
 Resolvers can be stored and used later (for example from another thread or callback). The
