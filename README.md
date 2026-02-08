@@ -96,6 +96,77 @@ auto done = prom
 (void)co_await done;
 ```
 
+You can also chain `Then`, `Catch`, and `Finally` with non-promise lambdas.
+The return values are wrapped into promises automatically.
+This avoids creating a coroutine frame for those steps.
+
+```cpp
+#include <promise/promise.h>
+
+auto done = MakePromise([]() -> Promise<int> { co_return 5; })
+	.Then([](int value) { return value + 10; })
+	.Catch([](std::exception_ptr) { return 0; })
+	.Finally([]() {
+		// Cleanup work.
+	});
+
+(void)co_await done;
+```
+
+## Type flow after Then/Catch
+
+The type expected by each `Then` or the value you get from `co_await` depends on what the previous
+steps can produce. The chain computes a single promise value type, and that is the type passed into
+the next `Then` or returned by `co_await`.
+
+Catch argument rules:
+
+- A `Catch` handler must take exactly one argument: `std::exception_ptr` or `const Exception&`.
+
+Value type rules for a `Catch` block:
+
+- If both the previous value type `T` and the `Catch` return type are `void`, the result is
+  `Promise<void>`.
+- If `T` is non-void and `Catch` returns `void`, the result is `Promise<std::optional<T>>`.
+- If `T` is `void` and `Catch` returns `T2`, the result is `Promise<std::optional<T2>>`.
+- If `T` and `T2` are the same type, the result is `Promise<T>`.
+- If `T` and `T2` differ, the result is `Promise<std::variant<T, T2>>`.
+
+Example with `std::optional` after `Catch`:
+
+```cpp
+#include <promise/promise.h>
+
+auto chain = MakePromise([]() -> Promise<int> { co_return 1; })
+	.Catch([](std::exception_ptr) -> Promise<void> { co_return; })
+	.Then([](std::optional<int> value) -> Promise<int> {
+		co_return value.value_or(0);
+	});
+
+auto result = co_await chain; // result is int
+```
+
+Example with `std::variant` when types differ:
+
+```cpp
+#include <promise/promise.h>
+
+auto chain = MakePromise([]() -> Promise<int> { co_return 2; })
+	.Then([](int value) -> Promise<double> { co_return value * 1.5; })
+	.Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
+	.Then([](std::variant<int, double> value) -> Promise<void> {
+		// Handle both types.
+		if (std::holds_alternative<int>(value)) {
+			(void)std::get<int>(value);
+		} else {
+			(void)std::get<double>(value);
+		}
+		co_return;
+	});
+
+(void)co_await chain; // co_await type follows the same rules
+```
+
 ## Done, Value, Exception
 
 These methods let you inspect a promise state without awaiting it:
@@ -168,3 +239,11 @@ Enable promise leak detection via CMake options:
 - `PROMISE_MEMCHECK_FULL` (default ON)
 
 These options define `PROMISE_MEMCHECK` and `PROMISE_MEMCHECK_FULL` for the library and the test.
+
+To enable runtime leak reporting, add this at the beginning of `main` or `WinMain`:
+
+```cpp
+#ifdef PROMISE_MEMCHECK
+auto const _{promise::Memcheck()};
+#endif
+```
