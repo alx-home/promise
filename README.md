@@ -38,6 +38,7 @@ a `thread_local` object that has already been destroyed when a thread exits.
 
 ```cpp
 #include <promise/promise.h>
+#include <stdexcept>
 
 Promise<int> GetAnswer() {
 	co_return 42;
@@ -55,6 +56,34 @@ Promise<void> Demo() {
 	(void)co_await chained;
 	co_return;
 }
+```
+
+## Helper utilities
+
+```cpp
+#include <promise/promise.h>
+#include <stdexcept>
+
+auto [pure, resolve, reject] = promise::Pure<int>();
+resolve->operator()(7);
+
+auto all = promise::All(
+	MakePromise([]() -> Promise<int> { co_return 1; }),
+	MakePromise([]() -> Promise<int> { co_return 2; })
+);
+
+auto prom = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
+	MakeReject<std::runtime_error>(reject, "failed");
+	co_return;
+});
+
+auto [prom2, resolve2, reject2] = MakeRPromise(
+	[](Resolve<int> const&, Reject const&) -> Promise<int, true> { co_return; }
+);
+(*resolve2)(123);
+
+auto ok = Promise<int>::Resolve(5);
+auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
 ```
 
 ## Forwarding arguments into `MakePromise`
@@ -140,6 +169,26 @@ auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promis
 auto value = co_await prom;
 ```
 
+## `Promise::Resolve` and `Promise::Reject`
+
+Use these static helpers to create an already-resolved or already-rejected promise without
+starting a coroutine. This is useful for fast paths or for adapting existing sync results.
+
+```cpp
+#include <promise/promise.h>
+#include <stdexcept>
+
+auto ok = Promise<int>::Resolve(5);
+auto value = co_await ok;
+
+auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
+try {
+	(void)co_await err;
+} catch (std::exception const&) {
+	// Handle error
+}
+```
+
 Using `MakeRPromise` (promise + resolver tuple):
 
 ```cpp
@@ -200,20 +249,6 @@ auto value = co_await prom;
 
 If you do not need to await the promise but want it to stay alive until resolved, call
 `Detach()` on the promise handle before it goes out of scope.
-
-## Helper utilities
-
-```cpp
-#include <promise/promise.h>
-
-auto [pure, resolve, reject] = promise::Pure<int>();
-resolve->operator()(7);
-
-auto all = promise::All(
-	MakePromise([]() -> Promise<int> { co_return 1; }),
-	MakePromise([]() -> Promise<int> { co_return 2; })
-);
-```
 
 ## Finally usage
 
