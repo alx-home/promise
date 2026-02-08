@@ -18,6 +18,16 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - Optional leak detection via `PROMISE_MEMCHECK`.
 - Lambdas are stored in the promise, so captures survive until resolution.
 
+## Thread safety
+
+Promise state transitions are synchronized internally, so you can resolve, reject, and await
+promises from multiple threads without data races.
+
+Warning about `thread_local` (C++ coroutine truth): using `thread_local` variables in coroutine
+code is risky because a coroutine may resume on a different thread than the one that created the
+`thread_local` state. That can lead to reading a different instance than expected, or to accessing
+a `thread_local` object that has already been destroyed when a thread exits.
+
 ## Requirements
 
 - C++20 compiler.
@@ -45,6 +55,35 @@ Promise<void> Demo() {
 	(void)co_await chained;
 	co_return;
 }
+```
+
+## Forwarding arguments into `MakePromise`
+
+`MakePromise` forwards any extra arguments to the callable you pass in. This makes it easy to
+use function pointers or function objects without capturing arguments manually.
+
+```cpp
+#include <promise/promise.h>
+
+Promise<int> Add(int a, int b) {
+	co_return a + b;
+}
+
+auto sum = co_await MakePromise(Add, 2, 3);
+```
+
+For resolver-style promises, the resolver parameters come first, followed by your forwarded
+arguments.
+
+```cpp
+#include <promise/promise.h>
+
+Promise<int, true> AddAsync(Resolve<int> const& resolve, Reject const&, int a, int b) {
+	resolve(a + b);
+	co_return;
+}
+
+auto sum = co_await MakePromise(AddAsync, 2, 3);
 ```
 
 ## Lambda capture lifetime
@@ -99,7 +138,50 @@ auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promis
 });
 
 auto value = co_await prom;
+## Using resolvers outside the coroutine scope
+
+Resolvers can be stored and used later (for example from another thread or callback). The
+resolver objects are shared, so keep a `std::shared_ptr` to them. The general rule is that you
+may call `resolve`/`reject` only while the underlying promise state is still alive or after it
+has already completed. The promise handle itself can go out of scope as long as the underlying
+state is kept alive (for example by calling `Detach()` or storing the promise elsewhere).
+
+```cpp
+#include <promise/promise.h>
+
+auto [prom, resolve, reject] = promise::Pure<int>();
+
+StartAsyncWork([resolve]() {
+	(*resolve)(42);
+});
+
+auto value = co_await prom;
 ```
+
+```cpp
+#include <promise/promise.h>
+
+std::shared_ptr<Resolve<int>> resolver;
+std::shared_ptr<Reject> rejecter;
+
+auto prom = MakePromise([
+	&resolver,
+	&rejecter
+](Resolve<int> const& resolve, Reject const& reject) -> Promise<int, true> {
+	resolver = resolve.shared_from_this();
+	rejecter = reject.shared_from_this();
+	co_return;
+});
+
+// Later, from outside the coroutine body:
+[[maybe_unused]] auto ok = (*resolver)(42);
+// or: (*rejecter)(std::current_exception());
+
+auto value = co_await prom;
+```
+
+If you do not need to await the promise but want it to stay alive until resolved, call
+`Detach()` on the promise handle before it goes out of scope.
 
 ## Helper utilities
 
