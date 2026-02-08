@@ -267,7 +267,7 @@ public:
       }
    }
 
-   bool Done() noexcept(false) {
+   bool Done() const noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};
       return details_->IsDone(lock);
