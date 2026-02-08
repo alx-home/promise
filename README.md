@@ -33,11 +33,11 @@ Promise<int> GetAnswer() {
 Promise<void> Demo() {
 	auto result = co_await GetAnswer();
 
-	auto chained = MakePromise([=]() -> Promise<int> {
-										co_return result + 1;
-								 })
-								 .Then([](int value) -> Promise<int> { co_return value * 2; })
-								 .Catch([](std::exception_ptr) -> Promise<int> { co_return -1; });
+	   auto chained = MakePromise([=]() -> Promise<int> {
+							   co_return result + 1;
+						   })
+						   .Then([](int value) -> Promise<int> { co_return value * 2; })
+						   .Catch([](std::exception_ptr) -> Promise<int> { co_return -1; });
 
 	(void)co_await chained;
 	co_return;
@@ -137,8 +137,9 @@ Catch argument rules:
 
 Then argument rules:
 
-- The value passed to `Then` must be taken by const reference when it is a value type
+- The value passed to `Then` shall be taken by const reference when it is a value type
 	(for example `const T&`, `const std::optional<T>&`, or `const std::variant<...>&`).
+- The same const-reference rule applies to `Catch` when its argument is a typed exception.
 
 Value type rules for a `Catch` block:
 
@@ -156,7 +157,7 @@ Example with `std::optional` after `Catch`:
 
 auto chain = MakePromise([]() -> Promise<int> { co_return 1; })
 	.Catch([](std::exception_ptr) -> Promise<void> { co_return; })
-	.Then([](std::optional<int> value) -> Promise<int> {
+	.Then([](std::optional<int> const& value) -> Promise<int> {
 		co_return value.value_or(0);
 	});
 
@@ -169,9 +170,9 @@ Example with `std::variant` when types differ:
 #include <promise/promise.h>
 
 auto chain = MakePromise([]() -> Promise<int> { co_return 2; })
-	.Then([](int value) -> Promise<double> { co_return value * 1.5; })
+	.Then([](int const& value) -> Promise<double> { co_return value * 1.5; })
 	.Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
-	.Then([](std::variant<int, double> value) -> Promise<void> {
+	.Then([](std::variant<int, double> const& value) -> Promise<void> {
 		// Handle both types.
 		if (std::holds_alternative<int>(value)) {
 			(void)std::get<int>(value);
