@@ -4,8 +4,10 @@
 
 Coroutine-native Promise implementation for C++20 with a JavaScript-like feel. Chain `Then`,
 recover with `Catch`, and clean up with `Finally`, all with minimal boilerplate and clear flow.
-Use resolver-style promises when you need explicit control, while keeping the ergonomics of JS
-Promises in modern C++.
+Lambdas passed into promises are stored by the promise itself, so lambda captures live until
+completion. This avoids a common C++ coroutine pitfall where values captured in `[]` can be
+destroyed before the coroutine finishes. Use resolver-style promises when you need explicit
+control, while keeping the ergonomics of JS Promises in modern C++.
 
 ## Features
 
@@ -14,6 +16,7 @@ Promises in modern C++.
 - Resolver promises: `Promise<T, true>` plus `Resolve<T>` and `Reject`.
 - Helpers: `promise::All(...)` and `promise::Pure<T>()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
+- Lambdas are stored in the promise, so captures survive until resolution.
 
 ## Requirements
 
@@ -43,6 +46,45 @@ Promise<void> Demo() {
 	co_return;
 }
 ```
+
+## Lambda capture lifetime
+
+Promises store the lambdas you pass to `MakePromise`, `Then`, `Catch`, and `Finally`. That means
+captures are kept alive until the promise resolves or rejects. This avoids the typical coroutine
+lifetime issue where a lambda's captured values might be destroyed before the coroutine completes.
+
+Example: safe value capture from a local scope
+
+```cpp
+#include <promise/promise.h>
+
+Promise<std::string> MakeGreeting() {
+	std::string name = "Alex";
+	return MakePromise([=]() -> Promise<std::string> {
+		co_return "Hello, " + name;
+	});
+}
+
+auto greeting = co_await MakeGreeting();
+```
+
+Example: move-only capture kept alive through the chain
+
+```cpp
+#include <memory>
+#include <promise/promise.h>
+
+Promise<int> UseResource() {
+	auto resource = std::make_unique<int>(7);
+	return MakePromise([res = std::move(resource)]() mutable -> Promise<int> {
+		co_return *res + 1;
+	});
+}
+
+auto value = co_await UseResource();
+```
+
+Note: reference captures still require the referenced object to outlive the promise.
 
 ## Resolver-style promises
 
