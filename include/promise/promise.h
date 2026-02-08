@@ -280,7 +280,8 @@ public:
    }
 
    template <class FUN, class SELF, class... ARGS>
-   constexpr auto Then(this SELF&& self, FUN&& func, ARGS&&... args) {
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   Then(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
 
       if constexpr (std::is_lvalue_reference_v<SELF>) {
@@ -293,7 +294,8 @@ public:
    }
 
    template <class FUN, class SELF, class... ARGS>
-   constexpr auto Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
 
       if constexpr (std::is_lvalue_reference_v<SELF>) {
@@ -325,15 +327,15 @@ public:
 
    template <class TYPE = promise::VPromise>
    auto ToPointer() && {
-      return std::unique_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
+      return std::shared_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
    }
 
 private:
-   std::unique_ptr<Details> details_{};
+   std::shared_ptr<Details> details_{};
 
    Awaitable& VAwait() final { return details_->VAwait(); }
 
-   Promise(std::unique_ptr<Details> details)
+   Promise(std::shared_ptr<Details> details)
       : details_(std::move(details)) {}
 
    Promise(Details::handle_type handle)

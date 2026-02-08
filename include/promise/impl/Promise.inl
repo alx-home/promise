@@ -495,7 +495,7 @@ public:
    }
 
    details::Promise<T, WITH_RESOLVER>& Detach(
-     std::unique_ptr<details::Promise<T, WITH_RESOLVER>>&& self
+     std::shared_ptr<details::Promise<T, WITH_RESOLVER>>&& self
    ) {
       assert(self);
       std::unique_lock lock{self->mutex_};
@@ -528,7 +528,7 @@ protected:
    Locker            lock_{this->mutex_, std::defer_lock};
 
    handle_type                                         handle_{nullptr};
-   std::unique_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
+   std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
    std::unique_ptr<Resolver<T, WITH_RESOLVER>>         resolver_{nullptr};
 
 public:
@@ -808,7 +808,7 @@ private:
 
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto
-   Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+   Then(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
       ScopeExit _{[&]() { this->Detach(std::move(self)); }};
       return self->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
@@ -927,7 +927,7 @@ private:
 
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto
-   Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+   Catch(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
       ScopeExit _{[&]() { this->Detach(std::move(self)); }};
       return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
