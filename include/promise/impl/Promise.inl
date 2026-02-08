@@ -703,51 +703,128 @@ private:
    }
 
    template <class FUN, class... ARGS>
-   constexpr auto Then(FUN&& func, ARGS&&... args) & {
-      // Promise return type
-      using T2 = return_t<return_t<FUN>>;
+   [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
 
       if constexpr (!promise::WITH_RESOLVER<FUN>) {
          // Optimisation skip coroutine frame creation
 
          if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
-            if constexpr (IS_VOID) {
+            if constexpr (!IS_PROMISE<FUN>) {
+               // Function return type
+               using T2 = return_t<FUN>;
+
+               try {
+                  if constexpr (IS_VOID) {
+                     if constexpr (std::is_void_v<T2>) {
+                        func(std::forward<ARGS>(args)...);
+                        return ::Promise<T2, true>::Resolve();
+                     } else {
+                        return ::Promise<T2, true>::Resolve(func(std::forward<ARGS>(args)...));
+                     }
+                  } else {
+                     if constexpr (std::is_void_v<T2>) {
+                        func(this->GetValue(lock), std::forward<ARGS>(args)...);
+                        return ::Promise<T2, true>::Resolve();
+                     } else {
+                        return ::Promise<T2, true>::Resolve(
+                          func(this->GetValue(lock), std::forward<ARGS>(args)...)
+                        );
+                     }
+                  }
+               } catch (...) {
+                  return ::Promise<T2, true>::Reject(std::current_exception());
+               }
+            } else if constexpr (IS_VOID) {
                return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
             } else {
-               return ::MakePromise(std::move(func), this->GetValue(), std::forward<ARGS>(args)...);
+               return ::MakePromise(
+                 std::move(func), this->GetValue(lock), std::forward<ARGS>(args)...
+               );
             }
          }
       }  // else @todo
 
-      return ::MakePromise(
-        [func = std::forward<FUN>(func
-         )](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> ::Promise<T2, false> {
-           if constexpr (IS_VOID) {
-              co_await self;
-              co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
-           } else {
-              co_return co_await ::MakePromise(
-                std::move(func), co_await self, std::forward<ARGS>(args)...
-              );
-           }
-        },
-        *this,
-        std::forward<ARGS>(args)...
-      );
+      if constexpr (IS_PROMISE<FUN>) {
+         // Promise return type
+         using T2 = return_t<return_t<FUN>>;
+
+         return ::MakePromise(
+           [func = std::forward<FUN>(func
+            )](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> ::Promise<T2, false> {
+              if constexpr (IS_VOID) {
+                 co_await self;
+                 co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
+              } else {
+                 co_return co_await ::MakePromise(
+                   std::move(func), co_await self, std::forward<ARGS>(args)...
+                 );
+              }
+           },
+           *this,
+           std::forward<ARGS>(args)...
+         );
+      } else {
+         // Function return type
+         using T2                        = return_t<FUN>;
+         auto [promise, resolve, reject] = promise::Pure<T2>();
+
+         ::MakePromise(
+           [func = std::forward<FUN>(func), resolve, reject](
+             Promise<T, WITH_RESOLVER>& self, ARGS&&... args
+           ) -> ::Promise<std::conditional_t<IS_VOID, void, void>, false> {
+              // std::conditional_t<IS_VOID, void, void> is used to delay the return type deduction
+              // to avoid Promise<void> undefined type compilation error
+              try {
+                 if constexpr (IS_VOID) {
+                    co_await self;
+                    if constexpr (std::is_void_v<T2>) {
+                       func(std::forward<ARGS>(args)...);
+                       (*resolve)();
+                    } else {
+                       (*resolve)(func(std::forward<ARGS>(args)...));
+                    }
+                 } else {
+                    if constexpr (std::is_void_v<T2>) {
+                       func(co_await self, std::forward<ARGS>(args)...);
+                       (*resolve)();
+                    } else {
+                       (*resolve)(func(co_await self, std::forward<ARGS>(args)...));
+                    }
+                 }
+              } catch (...) {
+                 (*reject)(std::current_exception());
+              }
+
+              co_return;
+           },
+           *this,
+           std::forward<ARGS>(args)...
+         )
+           .Detach();
+
+         return std::move(promise);
+      }
    }
 
    template <class FUN, class... ARGS>
-   constexpr auto Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+   [[nodiscard]] constexpr auto
+   Then(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
       ScopeExit _{[&]() { this->Detach(std::move(self)); }};
       return self->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
    template <class FUN, class... ARGS>
-   constexpr auto Catch(FUN&& func, ARGS&&... args) & {
+   [[nodiscard]] constexpr auto Catch(FUN&& func, ARGS&&... args) & {
       // Promise return type
       using promise_t = return_t<decltype(std::function{func})>;
-      using T2        = return_t<promise_t>;
+      using T2        = std::remove_pointer_t<decltype([]() constexpr {
+         if constexpr (IS_PROMISE<FUN>) {
+            return static_cast<return_t<promise_t>*>(nullptr);
+         } else {
+            return static_cast<promise_t*>(nullptr);
+         }
+      }())>;
       using FArgs     = args_t<decltype(std::function{func})>;
       static_assert(std::tuple_size_v<FArgs> == 1, "Catch promise must have exactly one argument!");
       using Exception = std::tuple_element_t<0, FArgs>;
@@ -790,7 +867,7 @@ private:
                return return_t::Resolve(std::optional<T2>{});
             }
          } else {
-            return return_t::Resolve(this->GetValue());
+            return return_t::Resolve(this->GetValue(lock));
          }
       }
 
@@ -824,7 +901,11 @@ private:
            assert(exc);
 
            if constexpr (std::is_void_v<T2>) {
-              co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+              if constexpr (IS_PROMISE<FUN>) {
+                 co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+              } else {
+                 func(exc, std::forward<ARGS>(args)...);
+              }
 
               if constexpr (std::is_void_v<T>) {
                  co_return;
@@ -832,7 +913,11 @@ private:
                  co_return std::optional<T>{};
               }
            } else {
-              co_return co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+              if constexpr (IS_PROMISE<FUN>) {
+                 co_return co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+              } else {
+                 co_return func(exc, std::forward<ARGS>(args)...);
+              }
            }
         },
         *this,
@@ -841,7 +926,8 @@ private:
    }
 
    template <class FUN, class... ARGS>
-   constexpr auto Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
+   [[nodiscard]] constexpr auto
+   Catch(std::unique_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
       ScopeExit _{[&]() { this->Detach(std::move(self)); }};
       return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);

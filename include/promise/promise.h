@@ -134,6 +134,15 @@ template <class FUN>
 static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
 
 template <class FUN>
+struct IsPromise : std::false_type {};
+
+template <class T, bool WITH_RESOLVER>
+struct IsPromise<::Promise<T, WITH_RESOLVER>> : std::true_type {};
+
+template <class FUN>
+static constexpr bool IS_PROMISE = IsPromise<return_t<FUN>>::value;
+
+template <class FUN>
 struct args_;
 
 template <class FUN>
