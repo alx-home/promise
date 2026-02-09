@@ -44,8 +44,11 @@ SOFTWARE.
 #include <utility>
 #include <variant>
 
-// Add a cast operator to an exception pointer (Reverse engineering of MSVC22
-// must not works if compiled with other compiler)
+/**
+ * @brief MSVC-specific helper to extract typed exceptions from std::exception_ptr.
+ * @warning This relies on MSVC internal layout and is only tested on MSVC 2019/2022.
+ * @note Best practice: prefer std::exception_ptr unless you control the toolchain.
+ */
 template <class T>
    requires(std::is_class_v<T>)
 struct ExceptionWrapper : std::exception_ptr {
@@ -86,6 +89,12 @@ struct ExceptionWrapper : std::exception_ptr {
    }
 };
 
+/**
+ * @brief Build a Promise from a generic callable.
+ * @param func Callable returning a Promise or value.
+ * @param args Arguments forwarded to the callable.
+ * @return Constructed promise.
+ */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
 static constexpr auto
@@ -93,6 +102,13 @@ MakePromise(FUN&& func, ARGS&&... args) {
    return MakePromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);
 }
 
+/**
+ * @brief Reject a promise by constructing an exception.
+ * @param reject Reject handle.
+ * @param args Constructor args for EXCEPTION.
+ * @return True if rejected, false if already rejected.
+ * @warning When RELAXED is false, a double reject throws.
+ */
 template <class EXCEPTION, bool RELAXED, class... ARGS>
 bool
 MakeReject(promise::Reject const& reject, ARGS&&... args) {
@@ -106,6 +122,11 @@ MakeReject(promise::Reject const& reject, ARGS&&... args) {
    return true;
 }
 
+/**
+ * @brief Create a rejected promise by constructing an exception.
+ * @param args Constructor args for EXCEPTION.
+ * @return Rejected promise instance.
+ */
 template <class PROMISE, class EXCEPTION, class... ARGS>
 auto
 MakeReject(ARGS&&... args) {
@@ -117,11 +138,20 @@ struct Terminate : std::runtime_error {
    using std::runtime_error::runtime_error;
 };
 
+/**
+ * @brief Construct a value resolver from an implementation callback.
+ * @param impl Callback invoked on resolve.
+ */
 template <class T>
    requires(!std::is_void_v<T>)
 Resolve<T>::Resolve(std::function<void(T const&)> impl)
    : impl_(std::move(impl)) {}
 
+/**
+ * @brief Resolve the promise with a value.
+ * @param value Value to resolve with.
+ * @return True if this call resolved the promise, false if it was already resolved.
+ */
 template <class T>
    requires(!std::is_void_v<T>)
 bool
@@ -134,6 +164,10 @@ Resolve<T>::operator()(T const& value) const {
    return false;
 }
 
+/**
+ * @brief Check whether the resolver is still usable.
+ * @return True if already resolved, false otherwise.
+ */
 template <class T>
    requires(!std::is_void_v<T>)
 Resolve<T>::operator bool() const {
@@ -156,16 +190,34 @@ struct Resolver {
                                        ) mutable { this->Reject(std::move(exc), *resolved); })
    };
 
+   /**
+    * @brief Check if the resolver is already resolved.
+    * @return True if already resolved.
+    */
    bool await_ready() const { return *resolved_; }
 
+   /**
+    * @brief Resume the await (no value to return).
+    */
    void await_resume() const {}
 
+   /**
+    * @brief Resolve the promise with a value.
+    * @param value Value to resolve with.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
    template <class TT>
       requires(std::is_convertible_v<TT, T>)
    bool Resolve(TT&& value) {
       return Resolve(value, *this->resolved_);
    }
 
+   /**
+    * @brief Resolve the promise with a value and a shared resolved flag.
+    * @param value Value to resolve with.
+    * @param resolved Shared resolved flag.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
    template <class TT>
       requires(std::is_convertible_v<TT, T>)
    bool Resolve(TT&& value, std::atomic<bool>& resolved) {
@@ -184,8 +236,19 @@ struct Resolver {
       return false;
    }
 
+   /**
+    * @brief Reject the promise with an exception.
+    * @param exception Exception to store.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool Reject(std::exception_ptr exception) { return Reject(exception, *this->resolved_); }
 
+   /**
+    * @brief Reject the promise with an exception and a shared resolved flag.
+    * @param exception Exception to store.
+    * @param resolved Shared resolved flag.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool Reject(std::exception_ptr exception, std::atomic<bool>& resolved) {
       if (!resolved.exchange(true)) {
          std::unique_lock lock{promise_->mutex_};
@@ -216,11 +279,27 @@ struct Resolver<void, WITH_RESOLVER> {
      [this, resolved = resolved_](std::exception_ptr exc) mutable { this->Reject(exc, *resolved); }
    )};
 
+   /**
+    * @brief Check if the resolver is already resolved.
+    * @return True if already resolved.
+    */
    bool await_ready() const { return *resolved_; }
 
+   /**
+    * @brief Resume the await (no value to return).
+    */
    void await_resume() const {}
 
+   /**
+    * @brief Resolve the promise.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
    bool Resolve() { return Resolve(*resolved_); }
+   /**
+    * @brief Resolve the promise with a shared resolved flag.
+    * @param resolved Shared resolved flag.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
    bool Resolve(std::atomic<bool>& resolved) {
       if (!resolved.exchange(true)) {
          std::unique_lock lock{promise_->mutex_};
@@ -234,7 +313,18 @@ struct Resolver<void, WITH_RESOLVER> {
       return false;
    }
 
+   /**
+    * @brief Reject the promise with an exception.
+    * @param exception Exception to store.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool Reject(std::exception_ptr exception) { return Reject(exception, *resolved_); }
+   /**
+    * @brief Reject the promise with an exception and a shared resolved flag.
+    * @param exception Exception to store.
+    * @param resolved Shared resolved flag.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool Reject(std::exception_ptr exception, std::atomic<bool>& resolved) {
       if (!resolved.exchange(true)) {
          std::unique_lock lock{promise_->mutex_};
@@ -262,6 +352,11 @@ protected:
    static constexpr bool IS_VOID = VOID_TYPE;
 
 public:
+   /**
+    * @brief Get the resolved value using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return Resolved value reference.
+    */
    template <class SELF>
    auto const& GetValue(this SELF&& self, Lock) {
       assert(self.resolver_);
@@ -269,12 +364,21 @@ public:
       return *self.resolver_->value_;
    }
 
+   /**
+    * @brief Get the resolved value.
+    * @return Resolved value reference.
+    */
    template <class SELF>
    auto const& GetValue(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
    }
 
+   /**
+    * @brief Check if a value is resolved using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return True if resolved.
+    */
    template <class SELF>
    bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
@@ -288,6 +392,11 @@ protected:
    static constexpr bool IS_VOID = true;
 
 public:
+   /**
+    * @brief Check if the promise is resolved using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return True if resolved.
+    */
    template <class SELF>
    bool IsResolved(this SELF&& self, Lock) {
       assert(self.resolver_);
@@ -351,6 +460,10 @@ protected:
 
    struct VoidPromiseType {
    public:
+      /**
+       * @brief Return void from the coroutine.
+       * @param self Promise type context.
+       */
       template <class SELF>
       void return_void(this SELF&& self) {
          self.ReturnImpl();
@@ -359,6 +472,11 @@ protected:
 
    struct ValuePromiseType {
    public:
+      /**
+       * @brief Return a value from the coroutine.
+       * @param self Promise type context.
+       * @param value Value to return.
+       */
       template <class FROM, class SELF>
          requires(std::is_convertible_v<FROM, T>)
       void return_value(this SELF&& self, FROM&& value) {
@@ -386,6 +504,10 @@ protected:
          return ::Promise<T, WITH_RESOLVER>{handle_type::from_promise(*this)};
       }
 
+      /**
+       * @brief Get the parent promise details.
+       * @return Parent promise details pointer.
+       */
       Parent* GetParent() const { return parent_; }
 
       struct InitSuspend {
@@ -393,7 +515,15 @@ protected:
 
          [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
 
-         constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
+         /**
+          * @brief Suspend the coroutine at initial suspension.
+          * @param h Coroutine handle.
+          */
+         constexpr void await_suspend(std::coroutine_handle<> h) const noexcept { (void)h; }
+         /**
+          * @brief Complete initial suspend and attach a resolver.
+          * @note Best practice: create resolver promises via MakePromise/MakeRPromise.
+          */
          constexpr void await_resume() const noexcept(false) {
             if (!self_.resolver_) {
                // Promise has been created without MakePromise
@@ -410,11 +540,19 @@ protected:
          }
       };
       using FinalSuspend = std::suspend_never;
+      /**
+       * @brief Initial suspend hook.
+       * @return Awaitable initial suspend object.
+       */
       InitSuspend initial_suspend() {
          assert(this->parent_);
          return {.self_ = *this->parent_};
       }
 
+      /**
+       * @brief Final suspend hook.
+       * @return Final suspend awaitable.
+       */
       FinalSuspend final_suspend() noexcept {
          auto const parent = this->parent_;
 
@@ -432,6 +570,9 @@ protected:
          return {};
       }
 
+      /**
+       * @brief Handle an unhandled exception in the coroutine.
+       */
       void unhandled_exception() {
          auto const parent = this->parent_;
 
@@ -440,6 +581,10 @@ protected:
          parent->resolver_->Reject(std::current_exception());
       }
 
+      /**
+       * @brief Forward return values to the promise implementation.
+       * @param value Values to return.
+       */
       template <class... FROM>
          requires(
            (std::is_convertible_v<FROM, T> && ...)
@@ -464,22 +609,40 @@ protected:
    }
 
 public:
+   /**
+    * @brief Check if resolved using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return True if resolved.
+    */
    template <class SELF>
    bool IsResolved(this SELF&& self, Lock lock) {
       return self.ValuePromise::IsResolved(lock);
    }
 
+   /**
+    * @brief Check if done using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return True if resolved or rejected.
+    */
    template <class SELF>
    bool IsDone(this SELF&& self, Lock lock) {
       return self.ValuePromise::IsResolved(lock) || self.resolver_->exception_;
    }
 
+   /**
+    * @brief Check if done.
+    * @return True if resolved or rejected.
+    */
    template <class SELF>
    bool IsDone(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.IsDone(lock);
    }
 
+   /**
+    * @brief Resume awaiters once resolved.
+    * @param lock Active lock for thread-safe access.
+    */
    template <class SELF>
    void OnResolved(this SELF&& self, std::unique_lock<std::shared_mutex>& lock) {
       // If not Done, will be done on final_suspends
@@ -500,6 +663,11 @@ public:
       }
    }
 
+   /**
+    * @brief Detach the promise details from this handle.
+    * @param self Shared ownership of the promise details.
+    * @return Reference to promise details.
+    */
    details::Promise<T, WITH_RESOLVER>& Detach(
      std::shared_ptr<details::Promise<T, WITH_RESOLVER>>&& self
    ) {
@@ -527,7 +695,15 @@ public:
    Handle& operator=(Handle&& rhs) noexcept = delete;
    Handle& operator=(Handle const& rhs)     = delete;
 
-   bool Done(Lock) const { return handle_ == nullptr; }
+   /**
+    * @brief Check if the coroutine handle is cleared.
+    * @param lock Active lock for thread-safe access.
+    * @return True if the coroutine is complete.
+    */
+   bool Done(Lock lock) const {
+      (void)lock;
+      return handle_ == nullptr;
+   }
 
 protected:
    std::shared_mutex mutex_{};
@@ -591,11 +767,19 @@ public:
    Promise(Promise const&)                    = delete;
    Promise operator=(Promise const&)          = delete;
 
+   /**
+    * @brief Check if the promise can resume immediately.
+    * @return True if ready to resume.
+    */
    bool await_ready() {
       this->lock_.lock();
       return Ready(this->lock_);
    }
 
+   /**
+    * @brief Suspend the coroutine and register continuation.
+    * @param h Awaiting coroutine handle.
+    */
    void await_suspend(std::coroutine_handle<> h) {
       Unlock _{this->lock_};
 
@@ -606,6 +790,10 @@ public:
       Await(h, this->lock_);
    }
 
+   /**
+    * @brief Resume the await and return the resolved value or throw.
+    * @return Resolved value for non-void promises.
+    */
    auto await_resume() noexcept(false) {
       if (!this->lock_) {
          // await_suspend has released the lock
@@ -628,18 +816,32 @@ public:
 private:
    template <class...>
       requires(!WITH_RESOLVER)
+   /**
+    * @brief Start a resolver-less promise.
+    * @return Coroutine handle result.
+    */
    auto operator()() {
       return this->handle_();
    }
 
    template <class...>
       requires(WITH_RESOLVER)
+   /**
+    * @brief Start a resolver-style promise with a resolver.
+    * @param resolver Resolver to drive the promise.
+    * @return Coroutine handle result.
+    */
    auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
       assert(!this->resolver_);
       this->resolver_ = std::move(resolver);
       return this->handle_();
    }
 
+   /**
+    * @brief Get a type-erased awaitable wrapper.
+    * @return Reference to a heap-allocated awaitable wrapper.
+    * @warning The wrapper is deleted in await_resume.
+    */
    VPromise::Awaitable& VAwait() final {
       struct Awaitable
          : VPromise::Awaitable
@@ -647,6 +849,10 @@ private:
          , Refcount
 #endif
       {
+         /**
+          * @brief Construct a type-erased awaitable.
+          * @param self Promise details to await.
+          */
          Awaitable(details::Promise<T, WITH_RESOLVER>& self)
             :  //
 #ifdef PROMISE_MEMCHECK
@@ -656,14 +862,25 @@ private:
             self_(self) {
          }
 
+         /**
+          * @brief Check if the await can complete synchronously.
+          * @return True if ready to resume.
+          */
          bool await_ready() final { return self_.await_ready(); }
 
+         /**
+          * @brief Resume the await and destroy the wrapper.
+          */
          void await_resume() final {
             // Delete this After resume
             std::unique_ptr<Awaitable> self_ptr(this);
             self_.await_resume();
          }
 
+         /**
+          * @brief Suspend the coroutine and register continuation.
+          * @param h Awaiting coroutine handle.
+          */
          void await_suspend(std::coroutine_handle<> h) final { self_.await_suspend(h); }
 
       private:
@@ -673,16 +890,34 @@ private:
       return *new Awaitable{*this};
    }
 
-   auto const& GetException(Lock) {
+   /**
+    * @brief Get the stored exception using an existing lock.
+    * @param lock Active lock for thread-safe access.
+    * @return Stored exception pointer.
+    */
+   auto const& GetException(Lock lock) {
+      (void)lock;
       assert(this->resolver_);
       return this->resolver_->exception_;
    }
 
-   bool Await(std::coroutine_handle<> h, Lock) {
+   /**
+    * @brief Register an awaiting coroutine.
+    * @param h Awaiting coroutine handle.
+    * @param lock Active lock for thread-safe access.
+    * @return True if registered.
+    */
+   bool Await(std::coroutine_handle<> h, Lock lock) {
+      (void)lock;
       awaiters_.emplace_back(h);
       return true;
    }
 
+   /**
+    * @brief Check whether the promise is ready.
+    * @param lock Active lock for thread-safe access.
+    * @return True if ready to resume.
+    */
    bool Ready(Lock lock) {
       if (this->GetException(lock)) {
          return true;
@@ -691,6 +926,10 @@ private:
       return this->IsResolved(lock);
    }
 
+   /**
+    * @brief Forward return values to the resolver.
+    * @param value Values to resolve with.
+    */
    template <class... FROM>
       requires(
         (std::is_convertible_v<FROM, T> && ...)
@@ -708,6 +947,12 @@ private:
       }
    }
 
+   /**
+    * @brief Chain a continuation to run on resolve.
+    * @param func Continuation to invoke on resolve.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
 
@@ -812,6 +1057,13 @@ private:
       }
    }
 
+   /**
+    * @brief Chain a continuation on an rvalue promise handle.
+    * @param self Owning shared pointer to promise details.
+    * @param func Continuation to invoke on resolve.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto
    Then(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
@@ -820,6 +1072,12 @@ private:
       return self->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
+   /**
+    * @brief Chain a continuation to run on rejection.
+    * @param func Continuation to invoke on rejection.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Catch(FUN&& func, ARGS&&... args) & {
       // Promise return type
@@ -931,6 +1189,13 @@ private:
       );
    }
 
+   /**
+    * @brief Chain a rejection continuation on an rvalue promise handle.
+    * @param self Owning shared pointer to promise details.
+    * @param func Continuation to invoke on rejection.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto
    Catch(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
@@ -939,6 +1204,11 @@ private:
       return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
+   /**
+    * @brief Chain a continuation that runs regardless of outcome.
+    * @param func Continuation to invoke after resolve or reject.
+    * @return Chained promise.
+    */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Finally(FUN&& func) & {
       if constexpr (!promise::WITH_RESOLVER<FUN>) {
@@ -1079,6 +1349,12 @@ private:
       }
    }
 
+   /**
+    * @brief Chain a finally continuation on an rvalue promise handle.
+    * @param self Owning shared pointer to promise details.
+    * @param func Continuation to invoke after resolve or reject.
+    * @return Chained promise.
+    */
    template <class FUN>
    [[nodiscard]] constexpr auto Finally(std::shared_ptr<Promise>&& self, FUN&& func) && {
       assert(self);
@@ -1087,6 +1363,11 @@ private:
    }
 
 public:
+   /**
+    * @brief Create a resolved promise without starting a coroutine.
+    * @param args Constructor args for the resolved value (if any).
+    * @return Resolved promise.
+    */
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
@@ -1101,6 +1382,11 @@ public:
       return promise;
    }
 
+   /**
+    * @brief Create a rejected promise without starting a coroutine.
+    * @param args Constructor args for the rejection value (if any).
+    * @return Rejected promise.
+    */
    template <class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
       ::Promise<T, WITH_RESOLVER> promise{handle_type{}};
@@ -1115,13 +1401,27 @@ public:
       return promise;
    }
 
+   /**
+    * @brief Create a promise from a callable and optional resolver.
+    * @param func Callable used to produce the promise.
+    * @param args Arguments forwarded to the callable.
+    * @return Promise or tuple when RPROMISE is true.
+    */
    template <bool RPROMISE, class FUN, class... ARGS>
    static constexpr auto Create(FUN&& func, ARGS&&... args) {
 
       struct FunctionImpl : Function {
+         /**
+          * @brief Construct a function holder from an rvalue callable.
+          * @param value Callable to store.
+          */
          explicit FunctionImpl(std::remove_cvref_t<FUN>&& value)
             : func_(std::move(value)) {}
 
+         /**
+          * @brief Construct a function holder from an lvalue callable.
+          * @param value Callable to store.
+          */
          explicit FunctionImpl(std::remove_cvref_t<FUN> const& value)
             : func_(value) {}
 
@@ -1164,6 +1464,11 @@ private:
 };
 }  // namespace details
 
+/**
+ * @brief Await all promises and return a combined result.
+ * @param promise Promises to await.
+ * @return Tuple of resolved values (std::nullopt_t for void).
+ */
 template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
@@ -1217,6 +1522,12 @@ Memcheck() {
 
 }  // namespace promise
 
+/**
+ * @brief Build a Promise from a std::function.
+ * @param func Callable returning a Promise or value.
+ * @param args Arguments forwarded to the callable.
+ * @return Constructed promise.
+ */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN>)
 static constexpr auto
@@ -1228,6 +1539,12 @@ MakePromise(FUN&& func, ARGS&&... args) {
    );
 }
 
+/**
+ * @brief Build a resolver-style Promise from a std::function.
+ * @param func Callable returning a resolver-style Promise.
+ * @param args Arguments forwarded to the callable.
+ * @return Constructed resolver-style promise or tuple.
+ */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
 static constexpr auto
@@ -1239,6 +1556,12 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
    );
 }
 
+/**
+ * @brief Build a resolver-style Promise from a generic callable.
+ * @param func Callable returning a resolver-style Promise.
+ * @param args Arguments forwarded to the callable.
+ * @return Constructed resolver-style promise or tuple.
+ */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
 static constexpr auto
@@ -1246,6 +1569,10 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
    return MakeRPromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);
 }
 
+/**
+ * @brief Build a resolver and its resolve/reject handles.
+ * @return Tuple (resolver, resolve, reject).
+ */
 template <class T>
 static constexpr auto
 MakeResolver() {
@@ -1255,6 +1582,10 @@ MakeResolver() {
 
 namespace promise {
 
+/**
+ * @brief Build a promise and its resolve/reject handles.
+ * @return Tuple (promise, resolve, reject).
+ */
 template <class T>
 static constexpr auto
 Pure() {
