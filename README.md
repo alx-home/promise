@@ -276,7 +276,7 @@ auto done = prom
 (void)co_await done;
 ```
 
-# Using non-promise lambdas in Then/Catch/Finally
+## Using non-promise lambdas in Then/Catch/Finally
 
 You can also chain `Then`, `Catch`, and `Finally` with non-promise lambdas.
 The return values are wrapped into promises automatically.
