@@ -70,6 +70,7 @@ struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
    bool operator()() const;
    /**
     * @brief Check whether this resolver can still resolve.
+    * @return True if already resolved, false otherwise.
     */
    operator bool() const;
 
@@ -98,6 +99,7 @@ struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
    bool operator()(T const& value) const;
    /**
     * @brief Check whether this resolver can still resolve.
+    * @return True if already resolved, false otherwise.
     */
    operator bool() const;
 
@@ -124,6 +126,7 @@ struct Reject : std::enable_shared_from_this<Reject> {
    bool operator()(std::exception_ptr exception) const;
    /**
     * @brief Check whether this rejector can still reject.
+    * @return True if already rejected, false otherwise.
     */
    operator bool() const;
 
@@ -227,6 +230,7 @@ struct VPromise {
       virtual ~Awaitable() = default;
       /**
        * @brief Check if the await can complete synchronously.
+       * @return True if ready to resume.
        */
       virtual bool await_ready() = 0;
       /**
@@ -267,6 +271,7 @@ using Pointer = std::unique_ptr<VPromise>;
  * @tparam FUN Function type (std::function).
  * @param func Callable that returns Promise<T> or T.
  * @param args Arguments forwarded to the callable.
+ * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN>)
@@ -277,6 +282,7 @@ static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
  * @tparam FUN Callable type.
  * @param func Callable that returns Promise<T> or T.
  * @param args Arguments forwarded to the callable.
+ * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
@@ -287,6 +293,7 @@ static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
  * @tparam FUN Function type (std::function).
  * @param func Callable that returns Promise<T, true>.
  * @param args Arguments forwarded to the callable (after resolver args).
+ * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
@@ -297,6 +304,7 @@ static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
  * @tparam FUN Callable type.
  * @param func Callable that returns Promise<T, true>.
  * @param args Arguments forwarded to the callable (after resolver args).
+ * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
@@ -308,6 +316,8 @@ static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
  * @tparam RELAXED When true, ignore double-rejects.
  * @param reject Reject handle.
  * @param args Constructor args for EXCEPTION.
+ * @return True if rejected, false if already rejected.
+ * @warning When RELAXED is false, a double reject throws.
  */
 template <class EXCEPTION, bool RELAXED = true, class... ARGS>
 bool MakeReject(promise::Reject const& reject, ARGS&&... args);
@@ -316,6 +326,7 @@ namespace promise {
 /**
  * @brief Build a promise and its resolve/reject handles.
  * @treturn Tuple-like result (promise, resolve, reject).
+ * @return Tuple (promise, resolve, reject).
  */
 template <class T>
 static constexpr auto Pure();
@@ -323,6 +334,7 @@ static constexpr auto Pure();
 /**
  * @brief Await all promises and return a combined result.
  * @param promise Promises to await.
+ * @return Tuple of resolved values (std::nullopt_t for void).
  */
 template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
@@ -350,6 +362,7 @@ public:
 
    /**
     * @brief Check if the promise can resume immediately.
+    * @return True if ready to resume.
     */
    bool await_ready() {
       assert(details_);
@@ -367,6 +380,8 @@ public:
 
    /**
     * @brief Resume the await and return the resolved value or throw.
+    * @return Resolved value for non-void promises.
+    * @warning Throws if the promise was rejected.
     */
    auto await_resume() noexcept(false) {
       assert(details_);
@@ -377,6 +392,8 @@ public:
       requires(!WITH_RESOLVER)
    /**
     * @brief Start a resolver-less promise.
+    * @return This promise handle (lvalue) or detached handle (rvalue).
+    * @note Best practice: keep or detach the handle immediately after starting.
     */
    auto&& operator()(this SELF&& self) {
       (*self.details_)();
@@ -393,6 +410,8 @@ public:
    /**
     * @brief Start a resolver-style promise with a resolver.
     * @param resolver Resolver to drive the promise.
+    * @return This promise handle (lvalue) or detached handle (rvalue).
+    * @note Best practice: keep or detach the handle immediately after starting.
     */
    auto&&
    operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T, WITH_RESOLVER>>&& resolver) {
@@ -407,6 +426,7 @@ public:
 
    /**
     * @brief Check if the promise is resolved or rejected.
+    * @return True if resolved or rejected.
     */
    bool Done() const noexcept(false) {
       assert(details_);
@@ -416,6 +436,8 @@ public:
 
    /**
     * @brief Get the resolved value (valid only when done and resolved).
+    * @return Resolved value.
+    * @warning Undefined if called before resolution.
     */
    auto Value() const noexcept(false) {
       assert(details_);
@@ -427,6 +449,7 @@ public:
 
    /**
     * @brief Get the stored exception (valid when rejected).
+    * @return Stored exception pointer.
     */
    std::exception_ptr Exception() const noexcept(false) {
       assert(details_);
@@ -440,6 +463,8 @@ public:
     * @brief Chain a continuation to run on resolve.
     * @param func Continuation to invoke on resolve.
     * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
     */
    Then(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
@@ -459,6 +484,8 @@ public:
     * @brief Chain a continuation to run on rejection.
     * @param func Continuation to invoke on rejection.
     * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
     */
    Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
@@ -477,6 +504,8 @@ public:
    /**
     * @brief Chain a continuation that runs regardless of outcome.
     * @param func Continuation to invoke after resolve or reject.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
     */
    Finally(this SELF&& self, FUN&& func) {
       assert(self.details_);
@@ -495,6 +524,7 @@ public:
    /**
     * @brief Create a resolved promise without starting a coroutine.
     * @param args Constructor args for the resolved value (if any).
+    * @return Resolved promise.
     */
    static constexpr auto Resolve(ARGS&&... args) {
       return Details::Promise::Resolve(std::forward<ARGS>(args)...);
@@ -504,6 +534,7 @@ public:
    /**
     * @brief Create a rejected promise without starting a coroutine.
     * @param args Constructor args for the rejection value (if any).
+    * @return Rejected promise.
     */
    static constexpr auto Reject(ARGS&&... args) {
       return Details::Promise::Reject(std::forward<ARGS>(args)...);
@@ -511,6 +542,8 @@ public:
 
    /**
     * @brief Detach so the promise can live independently of this handle.
+    * @return Reference to promise details.
+    * @note Best practice: detach only when the promise must outlive this handle.
     */
    auto& Detach() && {
       assert(details_);
@@ -526,6 +559,7 @@ public:
    template <class TYPE = promise::VPromise>
    /**
     * @brief Convert to a shared pointer of a type-erased promise.
+    * @return Shared pointer to a type-erased promise.
     */
    auto ToPointer() && {
       return std::shared_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
@@ -536,17 +570,20 @@ private:
 
    /**
     * @brief Type-erased awaitable for VPromise.
+    * @return Reference to a type-erased awaitable wrapper.
     */
    Awaitable& VAwait() final { return details_->VAwait(); }
 
    /**
     * @brief Construct from shared promise details.
+    * @param details Shared promise state.
     */
    Promise(std::shared_ptr<Details> details)
       : details_(std::move(details)) {}
 
    /**
     * @brief Construct from coroutine handle.
+    * @param handle Coroutine handle.
     */
    Promise(Details::handle_type handle)
       : details_{[&handle]() constexpr {
