@@ -39,18 +39,38 @@ class Promise;
 
 namespace promise {
 
+/**
+ * @brief Base exception type used by the promise helpers.
+ */
 struct Exception : std::runtime_error {
    using std::runtime_error::runtime_error;
 };
 
+/**
+ * @brief Resolver handle used to resolve a promise with a value.
+ */
 template <class T = void>
 struct Resolve;
 
 template <>
+/**
+ * @brief Resolver for Promise<void>.
+ */
 struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
+   /**
+    * @brief Construct a void resolver from an implementation callback.
+    * @param impl Callback invoked on resolve.
+    */
    Resolve(std::function<void()> impl);
 
+   /**
+    * @brief Resolve the promise.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
    bool operator()() const;
+   /**
+    * @brief Check whether this resolver can still resolve.
+    */
    operator bool() const;
 
 private:
@@ -60,10 +80,25 @@ private:
 
 template <class T>
    requires(!std::is_void_v<T>)
+/**
+ * @brief Resolver for Promise<T>.
+ */
 struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
+   /**
+    * @brief Construct a value resolver from an implementation callback.
+    * @param impl Callback invoked on resolve.
+    */
    Resolve(std::function<void(T const&)> impl);
 
-   bool operator()(T const&) const;
+   /**
+    * @brief Resolve the promise with a value.
+    * @param value Value to resolve with.
+    * @return True if this call resolved the promise, false if it was already resolved.
+    */
+   bool operator()(T const& value) const;
+   /**
+    * @brief Check whether this resolver can still resolve.
+    */
    operator bool() const;
 
 private:
@@ -71,10 +106,25 @@ private:
    mutable std::atomic<bool>     resolved_{false};
 };
 
+/**
+ * @brief Rejector handle used to reject a promise with an exception.
+ */
 struct Reject : std::enable_shared_from_this<Reject> {
+   /**
+    * @brief Construct a rejector from an implementation callback.
+    * @param impl Callback invoked on reject.
+    */
    Reject(std::function<void(std::exception_ptr)> impl);
 
+   /**
+    * @brief Reject the promise with an exception.
+    * @param exception Exception to store.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool operator()(std::exception_ptr exception) const;
+   /**
+    * @brief Check whether this rejector can still reject.
+    */
    operator bool() const;
 
 private:
@@ -166,48 +216,114 @@ struct args_<std::function<T(ARGS...)>> {
 template <class FUN>
 using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
-// For Handling a promise in a pointer
+/**
+ * @brief Type-erased promise interface, useful for storing promises in pointers.
+ */
 struct VPromise {
    struct Awaitable {
-      virtual ~Awaitable()                                = default;
-      virtual bool await_ready()                          = 0;
-      virtual void await_resume()                         = 0;
-      virtual void await_suspend(std::coroutine_handle<>) = 0;
+      /**
+       * @brief Virtual destructor.
+       */
+      virtual ~Awaitable() = default;
+      /**
+       * @brief Check if the await can complete synchronously.
+       */
+      virtual bool await_ready() = 0;
+      /**
+       * @brief Resume the await and return its result.
+       */
+      virtual void await_resume() = 0;
+      /**
+       * @brief Suspend the coroutine and register continuation.
+       * @param h Awaiting coroutine handle.
+       */
+      virtual void await_suspend(std::coroutine_handle<> h) = 0;
    };
 
+   /**
+    * @brief Detach the promise from this handle.
+    */
    virtual void VDetach() && = 0;
 
+   /**
+    * @brief Virtual destructor.
+    */
    virtual ~VPromise() = default;
 
+   /**
+    * @brief Access a type-erased awaitable.
+    */
    virtual Awaitable& VAwait() = 0;
 };
+/**
+ * @brief Owning pointer to a type-erased promise.
+ */
 using Pointer = std::unique_ptr<VPromise>;
 
 }  // namespace promise
 
+/**
+ * @brief Build a Promise from a std::function.
+ * @tparam FUN Function type (std::function).
+ * @param func Callable that returns Promise<T> or T.
+ * @param args Arguments forwarded to the callable.
+ */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN>)
 static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
 
+/**
+ * @brief Build a Promise from a generic callable.
+ * @tparam FUN Callable type.
+ * @param func Callable that returns Promise<T> or T.
+ * @param args Arguments forwarded to the callable.
+ */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
 static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
 
+/**
+ * @brief Build a resolver-style Promise from a std::function.
+ * @tparam FUN Function type (std::function).
+ * @param func Callable that returns Promise<T, true>.
+ * @param args Arguments forwarded to the callable (after resolver args).
+ */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
 static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
+/**
+ * @brief Build a resolver-style Promise from a generic callable.
+ * @tparam FUN Callable type.
+ * @param func Callable that returns Promise<T, true>.
+ * @param args Arguments forwarded to the callable (after resolver args).
+ */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
 static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
+/**
+ * @brief Reject a promise with a constructed exception.
+ * @tparam EXCEPTION Exception type to construct.
+ * @tparam RELAXED When true, ignore double-rejects.
+ * @param reject Reject handle.
+ * @param args Constructor args for EXCEPTION.
+ */
 template <class EXCEPTION, bool RELAXED = true, class... ARGS>
 bool MakeReject(promise::Reject const& reject, ARGS&&... args);
 namespace promise {
 
+/**
+ * @brief Build a promise and its resolve/reject handles.
+ * @treturn Tuple-like result (promise, resolve, reject).
+ */
 template <class T>
 static constexpr auto Pure();
 
+/**
+ * @brief Await all promises and return a combined result.
+ * @param promise Promises to await.
+ */
 template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
 namespace details {
@@ -221,22 +337,37 @@ struct Resolver;
 
 #include "impl/Promise.inl"
 
+/**
+ * @brief Promise handle that owns shared state and supports co_await.
+ * @tparam T Value type (or void).
+ * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
+ */
 template <class T, bool WITH_RESOLVER>
 class Promise : public promise::VPromise {
 public:
    using Details      = promise::details::Promise<T, WITH_RESOLVER>;
    using promise_type = Details::promise_type;
 
+   /**
+    * @brief Check if the promise can resume immediately.
+    */
    bool await_ready() {
       assert(details_);
       return details_->await_ready();
    }
 
+   /**
+    * @brief Suspend the coroutine and register continuation.
+    * @param h Awaiting coroutine handle.
+    */
    auto await_suspend(std::coroutine_handle<> h) {
       assert(details_);
       return details_->await_suspend(h);
    }
 
+   /**
+    * @brief Resume the await and return the resolved value or throw.
+    */
    auto await_resume() noexcept(false) {
       assert(details_);
       return details_->await_resume();
@@ -244,6 +375,9 @@ public:
 
    template <class SELF>
       requires(!WITH_RESOLVER)
+   /**
+    * @brief Start a resolver-less promise.
+    */
    auto&& operator()(this SELF&& self) {
       (*self.details_)();
 
@@ -256,6 +390,10 @@ public:
 
    template <class SELF>
       requires(WITH_RESOLVER)
+   /**
+    * @brief Start a resolver-style promise with a resolver.
+    * @param resolver Resolver to drive the promise.
+    */
    auto&&
    operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T, WITH_RESOLVER>>&& resolver) {
       (*self.details_)(std::move(resolver));
@@ -267,12 +405,18 @@ public:
       }
    }
 
+   /**
+    * @brief Check if the promise is resolved or rejected.
+    */
    bool Done() const noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};
       return details_->IsDone(lock);
    }
 
+   /**
+    * @brief Get the resolved value (valid only when done and resolved).
+    */
    auto Value() const noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};
@@ -281,6 +425,9 @@ public:
       return details_->GetValue(lock);
    }
 
+   /**
+    * @brief Get the stored exception (valid when rejected).
+    */
    std::exception_ptr Exception() const noexcept(false) {
       assert(details_);
       std::shared_lock lock{details_->mutex_};
@@ -289,6 +436,11 @@ public:
 
    template <class FUN, class SELF, class... ARGS>
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation to run on resolve.
+    * @param func Continuation to invoke on resolve.
+    * @param args Arguments forwarded to the continuation.
+    */
    Then(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
 
@@ -303,6 +455,11 @@ public:
 
    template <class FUN, class SELF, class... ARGS>
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation to run on rejection.
+    * @param func Continuation to invoke on rejection.
+    * @param args Arguments forwarded to the continuation.
+    */
    Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
       assert(self.details_);
 
@@ -317,6 +474,10 @@ public:
 
    template <class FUN, class SELF>
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation that runs regardless of outcome.
+    * @param func Continuation to invoke after resolve or reject.
+    */
    Finally(this SELF&& self, FUN&& func) {
       assert(self.details_);
 
@@ -331,24 +492,41 @@ public:
    }
 
    template <class... ARGS>
+   /**
+    * @brief Create a resolved promise without starting a coroutine.
+    * @param args Constructor args for the resolved value (if any).
+    */
    static constexpr auto Resolve(ARGS&&... args) {
       return Details::Promise::Resolve(std::forward<ARGS>(args)...);
    }
 
    template <class... ARGS>
+   /**
+    * @brief Create a rejected promise without starting a coroutine.
+    * @param args Constructor args for the rejection value (if any).
+    */
    static constexpr auto Reject(ARGS&&... args) {
       return Details::Promise::Reject(std::forward<ARGS>(args)...);
    }
 
+   /**
+    * @brief Detach so the promise can live independently of this handle.
+    */
    auto& Detach() && {
       assert(details_);
       auto& details = *details_;
       return details.Detach(std::move(details_));
    }
 
+   /**
+    * @brief Type-erased detach for VPromise.
+    */
    void VDetach() && override { static_cast<Promise&&>(*this).Detach(); }
 
    template <class TYPE = promise::VPromise>
+   /**
+    * @brief Convert to a shared pointer of a type-erased promise.
+    */
    auto ToPointer() && {
       return std::shared_ptr<TYPE>(static_cast<TYPE*>(new Promise{std::move(details_)}));
    }
@@ -356,11 +534,20 @@ public:
 private:
    std::shared_ptr<Details> details_{};
 
+   /**
+    * @brief Type-erased awaitable for VPromise.
+    */
    Awaitable& VAwait() final { return details_->VAwait(); }
 
+   /**
+    * @brief Construct from shared promise details.
+    */
    Promise(std::shared_ptr<Details> details)
       : details_(std::move(details)) {}
 
+   /**
+    * @brief Construct from coroutine handle.
+    */
    Promise(Details::handle_type handle)
       : details_{[&handle]() constexpr {
          struct MakeUniqueFriend : Details {
@@ -377,6 +564,12 @@ private:
    friend class ::promise::details::Promise;
 };
 
+/**
+ * @brief Public resolve handle alias.
+ */
 template <class T = void>
 using Resolve = promise::Resolve<T>;
-using Reject  = promise::Reject;
+/**
+ * @brief Public reject handle alias.
+ */
+using Reject = promise::Reject;
