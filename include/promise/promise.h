@@ -275,7 +275,8 @@ using Pointer = std::unique_ptr<VPromise>;
  */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN>)
-static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
+[[nodiscard("Either store this promise or call Detach()")]] static constexpr auto
+MakePromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Build a Promise from a generic callable.
@@ -286,7 +287,8 @@ static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
  */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN>)
-static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
+[[nodiscard("Either store this promise or call Detach()")]] static constexpr auto
+MakePromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Build a resolver-style Promise from a std::function.
@@ -297,7 +299,7 @@ static constexpr auto MakePromise(FUN&& func, ARGS&&... args);
  */
 template <class FUN, class... ARGS>
    requires(promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
-static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
+[[nodiscard]] static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Build a resolver-style Promise from a generic callable.
@@ -308,7 +310,7 @@ static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
  */
 template <class FUN, class... ARGS>
    requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
-static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
+[[nodiscard]] static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Reject a promise with a constructed exception.
