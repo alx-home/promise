@@ -366,7 +366,7 @@ public:
     * @brief Check if the promise can resume immediately.
     * @return True if ready to resume.
     */
-   bool await_ready() {
+   bool await_ready() const {
       assert(details_);
       return details_->await_ready();
    }
@@ -375,7 +375,7 @@ public:
     * @brief Suspend the coroutine and register continuation.
     * @param h Awaiting coroutine handle.
     */
-   auto await_suspend(std::coroutine_handle<> h) {
+   auto await_suspend(std::coroutine_handle<> h) const {
       assert(details_);
       return details_->await_suspend(h);
    }
@@ -385,7 +385,7 @@ public:
     * @return Resolved value for non-void promises.
     * @warning Throws if the promise was rejected.
     */
-   auto await_resume() noexcept(false) {
+   auto await_resume() const noexcept(false) {
       assert(details_);
       return details_->await_resume();
    }
