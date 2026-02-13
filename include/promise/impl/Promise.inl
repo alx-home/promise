@@ -1122,17 +1122,17 @@ private:
       if (this->IsDone()) {
          // Optimisation skip coroutine frame creation
 
-         if (auto lock = std::shared_lock{this->mutex_}; this->GetException(lock)) {
-            return return_t::Reject(this->GetException(lock));
-         } else if constexpr (std::is_void_v<T>) {
-            if constexpr (std::is_void_v<T2>) {
-               return return_t::Resolve();
+         if (std::shared_lock lock{this->mutex_}; !this->GetException(lock)) {
+            if constexpr (std::is_void_v<T>) {
+               if constexpr (std::is_void_v<T2>) {
+                  return return_t::Resolve();
+               } else {
+                  return return_t::Resolve(std::optional<T2>{});
+               }
             } else {
-               return return_t::Resolve(std::optional<T2>{});
+               return return_t::Resolve(this->GetValue(lock));
             }
-         } else {
-            return return_t::Resolve(this->GetValue(lock));
-         }
+         }  // @todo else
       }
 
       return MakePromise(
