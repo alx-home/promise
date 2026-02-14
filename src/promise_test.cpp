@@ -94,6 +94,19 @@ main() {
                 .Then([]() -> Promise<void> { co_return; })
                 .Then([]() -> Promise<int> { co_return 800; }),
             };
+            auto prom_catch_through2{
+              MakePromise([&]() -> Promise<int> { co_return 0; })
+                .Then([](int value) { return value + 3; })
+                .Catch([](std::exception_ptr) {})
+                .Then([](std::optional<int> const&) { return 0; })
+                .Catch([](std::exception_ptr) { return 0; })
+                .Then([](int) {})
+                .Catch([](std::exception_ptr) { return 0; })
+                .Then([](std::optional<int> const&) {})
+                .Catch([](std::exception_ptr) {})
+                .Then([]() {})
+                .Then([]() { return 800; }),
+            };
 
             auto [prom_pure, resolve, reject] = promise::Pure<int>();
 
@@ -182,12 +195,14 @@ main() {
                             }).ToPointer();
 
             auto promall{MakePromise([&]() -> Promise<void> {
-               auto const [res1, res2, res3, res4, int_, _] =
-                 co_await promise::All(prom, prom2, prom3, prom4, prom_int, prom_catch_through);
+               auto const [res1, res2, res3, res4, int_, catch_through, catch_through2] =
+                 co_await promise::All(
+                   prom, prom2, prom3, prom4, prom_int, prom_catch_through, prom_catch_through2
+                 );
                co_await prom_ptr->VAwait();
 
-               std::cout << res1 << " " << res2 << " " << res3 << " " << res4 << " " << int_
-                         << std::endl;
+               std::cout << res1 << " " << res2 << " " << res3 << " " << res4 << " " << int_ << " "
+                         << catch_through << " " << catch_through2 << std::endl;
 
                co_return;
             })};
