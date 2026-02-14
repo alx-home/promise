@@ -16,6 +16,7 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - Resolver promises: `Promise<T, true>` plus `Resolve<T>` and `Reject`.
 - Helpers: `promise::All(...)` and `promise::Pure<T>()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
+- Public handle types: `Promise<T>` (coroutine return), `WPromise<T>` (owning handle), and `VPromise` for type-erased pointers.
 - Lambdas are stored in the promise, so captures survive until resolution.
 
 ## Thread safety
@@ -33,6 +34,17 @@ a `thread_local` object that has already been destroyed when a thread exits.
 - C++20 compiler.
 - CMake 3.20+.
 - Dependency: `alx-home::cpp_utils` (linked by CMake).
+
+## Promise handle types
+
+`Promise<T>` is the coroutine return type you write in function signatures. `WPromise<T>` is an
+owning, awaitable handle you can store, pass around, or convert to type-erased pointers via
+`ToPointer()` when you need to keep promises in containers or interfaces. `VPromise` uses `V` for
+Virtual (type-erased base class), and `WPromise` uses `W` for Wrapped (owning handle).
+
+If a function returns a promise handle (not a coroutine), use `WPromise<T>`.
+There is no way in C++ to distinguish a function returning a promise from a coroutine promise
+type in the signature alone, so `Promise<T>` is reserved for coroutine return types.
 
 ## Basic usage
 
@@ -102,8 +114,8 @@ Promise<int> Add(int a, int b) {
 auto sum = co_await MakePromise(Add, 2, 3);
 ```
 
-For resolver-style promises, the resolver parameters come first, followed by your forwarded
-arguments.
+For resolver-style promises, resolver parameters come first, followed by your forwarded
+arguments. You may accept just `Resolve<T>` or both `Resolve<T>` and `Reject`.
 
 ```cpp
 #include <promise/promise.h>
@@ -114,6 +126,14 @@ Promise<int, true> AddAsync(Resolve<int> const& resolve, Reject const&, int a, i
 }
 
 auto sum = co_await MakePromise(AddAsync, 2, 3);
+
+// Resolve-only form (Reject is optional)
+Promise<int, true> AddAsync2(Resolve<int> const& resolve, int a, int b) {
+	resolve(a + b);
+	co_return;
+}
+
+auto sum2 = co_await MakePromise(AddAsync2, 2, 3);
 ```
 
 ## Lambda capture lifetime
@@ -313,9 +333,9 @@ Catch argument rules:
   versions.
 - Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
 - To support other compilers/versions, update the `ExceptionWrapper` implementation in
-  `include/promise/impl/Promise.inl` (the block guarded by the `_MSC_VER` static assert). That is
-  the only place using compiler-specific exception layout to extract typed exceptions from
-  `std::exception_ptr`.
+	`include/promise/details/ExceptionWrapper.inl` (the block guarded by the `_MSC_VER` static assert).
+	That is the only place using compiler-specific exception layout to extract typed exceptions from
+	`std::exception_ptr`.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.

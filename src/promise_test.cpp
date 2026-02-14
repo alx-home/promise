@@ -224,6 +224,12 @@ main() {
             } catch (std::exception const& e) {
                std::cout << "exc2? " << e.what() << std::endl;
             }
+
+            try {
+               co_await MakePromise([&]() -> WPromise<void> { return Test(); });
+            } catch (std::exception const& e) {
+               std::cout << "exc3? " << e.what() << std::endl;
+            }
          } catch (std::exception const& e) {
             std::cout << "exc? " << e.what() << std::endl;
          }
