@@ -399,7 +399,15 @@ public:
     * @return Reference to promise details.
     * @note Best practice: detach only when the promise must outlive this handle.
     */
-   using WPromise<T>::Detach;
+   auto& Detach() && {
+      using Promise = std::shared_ptr<promise::details::Promise<T, WITH_RESOLVER>>;
+
+      auto& details_ptr = std::get<Promise>(this->details_);
+
+      assert(details_ptr);
+      auto& details = *details_ptr;
+      return details.Detach(std::move(details_ptr));
+   }
 
    /**
     * @brief Type-erased detach for VPromise.
@@ -420,7 +428,10 @@ public:
     * @note Best practice: keep or detach the handle immediately after starting.
     */
    auto&& operator()(this SELF&& self) {
-      (*self.details_)();
+      using Promise = std::shared_ptr<promise::details::Promise<T, WITH_RESOLVER>>;
+
+      assert(std::holds_alternative<Promise>(self.details_));
+      (*std::get<Promise>(self.details_))();
 
       if constexpr (std::is_lvalue_reference_v<SELF>) {
          return self;

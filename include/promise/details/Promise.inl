@@ -41,6 +41,7 @@ SOFTWARE.
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace promise {
 struct Function {
@@ -355,7 +356,7 @@ private:
 
          ::MakePromise(
            [func = std::forward<FUN>(func), resolve, reject](
-             details::IPromise<T, WITH_RESOLVER>& self, ARGS&&... args
+             promise::details::Promise<T, WITH_RESOLVER>& self, ARGS&&... args
            ) -> details::IPromise<std::conditional_t<IS_VOID, void, void>, false> {
               // std::conditional_t<IS_VOID, void, void> is used to delay the return type deduction
               // to avoid Promise<void> undefined type compilation error
@@ -727,7 +728,10 @@ public:
       details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
       auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
-      auto const details = promise.details_.get();
+      using Promise = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
+
+      assert(std::holds_alternative<Promise>(promise.details_));
+      auto const details = std::get<Promise>(promise.details_).get();
       resolver->promise_ = details;
       details->resolver_ = std::move(resolver);
 

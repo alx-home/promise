@@ -27,10 +27,10 @@ SOFTWARE.
 #include "details/WPromise.inl"
 #include "details/helpers.inl"
 
-template <class T, bool WITH_RESOLVER = false>
+template <class T = void, bool WITH_RESOLVER = false>
 using Promise = promise::details::IPromise<T, WITH_RESOLVER>;
 
-template <class T>
+template <class T = void>
 using WPromise = promise::details::WPromise<T>;
 
 /**
