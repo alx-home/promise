@@ -48,12 +48,21 @@ type in the signature alone, so `Promise<T>` is reserved for coroutine return ty
 
 ## Basic usage
 
-```cpp
+````cpp
 #include <promise/promise.h>
 #include <stdexcept>
 
 Promise<int> GetAnswer() {
 	co_return 42;
+}
+
+// Returning a promise handle (not a coroutine) uses WPromise<T>.
+WPromise<int> FetchCachedOrAsync(bool use_cache) {
+	if (use_cache) {
+		return Promise<int>::Resolve(42);
+	}
+
+	return MakePromise([]() -> Promise<int> { co_return 42; });
 }
 
 Promise<void> Demo() {
@@ -62,16 +71,18 @@ Promise<void> Demo() {
 	   auto chained = MakePromise([=]() -> Promise<int> {
 							   co_return result + 1;
 						   })
-						   .Then([](int value) -> Promise<int> { co_return value * 2; })
-						   .Catch([](std::exception_ptr) -> Promise<int> { co_return -1; });
-
-	(void)co_await chained;
-	co_return;
-}
-```
-
-## Quick Card
-
+						   .Then([](int value)  { return value * 2; })
+							.Then([](int value) -> Promise<int> { co_return value / 2; })
+							.Then([](int value) -> WPromise<int> {
+								return FetchCachedOrAsync(value > 0);
+							})
+							.Catch([](std::exception_ptr) -> WPromise<void> {
+								return Promise<void>::Resolve();
+							})
+							.Then([](std::optional<int> const& value) -> Promise<int> {
+								// value is std::optional<int> because Catch returned void
+								co_return value.value_or(-1);
+							});
 ```cpp
 #include <promise/promise.h>
 #include <stdexcept>
@@ -97,7 +108,7 @@ auto [prom2, resolve2, reject2] = MakeRPromise(
 auto ok = Promise<int>::Resolve(5);
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
 auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
-```
+````
 
 ## Forwarding arguments into `MakePromise`
 
@@ -333,9 +344,9 @@ Catch argument rules:
   versions.
 - Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
 - To support other compilers/versions, update the `ExceptionWrapper` implementation in
-	`include/promise/details/ExceptionWrapper.inl` (the block guarded by the `_MSC_VER` static assert).
-	That is the only place using compiler-specific exception layout to extract typed exceptions from
-	`std::exception_ptr`.
+  `include/promise/details/ExceptionWrapper.inl` (the block guarded by the `_MSC_VER` static assert).
+  That is the only place using compiler-specific exception layout to extract typed exceptions from
+  `std::exception_ptr`.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
