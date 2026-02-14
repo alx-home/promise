@@ -48,7 +48,7 @@ type in the signature alone, so `Promise<T>` is reserved for coroutine return ty
 
 ## Basic usage
 
-````cpp
+```cpp
 #include <promise/promise.h>
 #include <stdexcept>
 
@@ -84,7 +84,10 @@ Promise<void> Demo() {
 								co_return value.value_or(-1);
 							});
 }
-````
+```
+
+## Quick Card
+
 ```cpp
 #include <promise/promise.h>
 #include <stdexcept>
@@ -110,7 +113,7 @@ auto [prom2, resolve2, reject2] = MakeRPromise(
 auto ok = Promise<int>::Resolve(5);
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
 auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
-````
+```
 
 ## Forwarding arguments into `MakePromise`
 
