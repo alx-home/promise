@@ -66,11 +66,7 @@ struct ExceptionWrapper : std::exception_ptr {
       );
 
       std::byte* addr;
-      std::ranges::copy_n(
-        reinterpret_cast<std::byte*>(data.data2_) + 0x38,
-        sizeof(addr),
-        reinterpret_cast<std::byte*>(&addr)
-      );
+      std::ranges::copy_n(data.data2_ + 0x38, sizeof(addr), reinterpret_cast<std::byte*>(&addr));
 
       auto ptr = reinterpret_cast<T*>(addr);
       return *ptr;
