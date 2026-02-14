@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "impl/Promise.inl"
+#include "details/Promise.inl"
 
 namespace promise {
 #ifdef PROMISE_MEMCHECK

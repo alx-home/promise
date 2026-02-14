@@ -35,13 +35,6 @@ SOFTWARE.
 #include <winnt.h>
 #include <winreg.h>
 
-#include <chrono>
-#include <exception>
-#include <iostream>
-#include <optional>
-#include <stdexcept>
-#include <thread>
-
 #ifdef _WIN32
 int WINAPI
 WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/, LPSTR /*lpCmdLine*/, int /*nCmdShow*/) {

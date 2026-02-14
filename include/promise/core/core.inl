@@ -24,17 +24,36 @@ SOFTWARE.
 
 #pragma once
 
-#include "details/WPromise.inl"
+#include "concepts.inl"
+#include "helpers.inl"
+#include "Resolve.inl"
+#include "Reject.inl"
+#include "VPromise.inl"
 
-template <class T, bool WITH_RESOLVER = false>
-using Promise = promise::details::WPromise<T, WITH_RESOLVER>;
+#include <cassert>
+#include <stdexcept>
+
+namespace promise {
 
 /**
- * @brief Public resolve handle alias.
+ * @brief Base exception type used by the promise helpers.
  */
-template <class T = void>
-using Resolve = promise::Resolve<T>;
+struct Exception : std::runtime_error {
+   using std::runtime_error::runtime_error;
+};
+
 /**
- * @brief Public reject handle alias.
+ * @brief Await all promises and return a combined result.
+ * @param promise Promises to await.
+ * @return Tuple of resolved values (std::nullopt_t for void).
  */
-using Reject = promise::Reject;
+template <class... PROMISE>
+static constexpr auto All(PROMISE&&... promise);
+namespace details {
+template <class T, bool WITH_RESOLVER>
+class Promise;
+}
+
+template <class T, bool WITH_RESOLVER = true>
+struct Resolver;
+}  // namespace promise

@@ -24,17 +24,38 @@ SOFTWARE.
 
 #pragma once
 
-#include "details/WPromise.inl"
+#include <cassert>
+#include <exception>
+#include <functional>
+#include <memory>
 
-template <class T, bool WITH_RESOLVER = false>
-using Promise = promise::details::WPromise<T, WITH_RESOLVER>;
+namespace promise {
 
 /**
- * @brief Public resolve handle alias.
+ * @brief Rejector handle used to reject a promise with an exception.
  */
-template <class T = void>
-using Resolve = promise::Resolve<T>;
-/**
- * @brief Public reject handle alias.
- */
-using Reject = promise::Reject;
+struct Reject : std::enable_shared_from_this<Reject> {
+   /**
+    * @brief Construct a rejector from an implementation callback.
+    * @param impl Callback invoked on reject.
+    */
+   Reject(std::function<void(std::exception_ptr)> impl);
+
+   /**
+    * @brief Reject the promise with an exception.
+    * @param exception Exception to store.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
+   bool operator()(std::exception_ptr exception) const;
+   /**
+    * @brief Check whether this rejector can still reject.
+    * @return True if already rejected, false otherwise.
+    */
+   operator bool() const;
+
+private:
+   std::function<void(std::exception_ptr)> impl_;
+   mutable std::atomic<bool>               rejected_{false};
+};
+
+}  // namespace promise
