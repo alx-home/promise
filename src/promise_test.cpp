@@ -35,6 +35,11 @@ SOFTWARE.
 #include <winnt.h>
 #include <winreg.h>
 
+WPromise<void>
+Test() {
+   return MakePromise([]() -> Promise<void> { throw std::runtime_error("TEST_EXCEPTION"); });
+}
+
 #ifdef _WIN32
 int WINAPI
 WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/, LPSTR /*lpCmdLine*/, int /*nCmdShow*/) {
@@ -99,42 +104,38 @@ main() {
 
             std::cout << "pure " << co_await prom_pure_wait << std::endl;
 
-            auto prom_int{prom2
-                            .Then([](int value) -> Promise<double> {
-                               throw std::runtime_error("test");
-                               co_return value + 3;
-                            })
-                            .Then([](double value) -> Promise<double> {
-                               std::cout << "not evaluted" << std::endl;
-                               co_return value;
-                            })
-                            .Catch([](std::exception_ptr) -> Promise<int> {
-                               // throw std::runtime_error("test2");
-                               std::cout << "test caught" << std::endl;
-                               co_return 300;
-                            })
-                            .Then([](std::variant<int, double> const& value) -> Promise<double> {
-                               std::cout << "test2 uncaught" << std::endl;
-                               throw std::runtime_error("test3");
-                               co_return std::holds_alternative<int>(value)
-                                 ? std::get<int>(value) + 3
-                                 : std::get<double>(value) + 8788;
-                            })
-                            .Catch([](std::exception_ptr) -> Promise<double> {
-                               // throw std::runtime_error("test2");
-                               std::cout << "test3 caught" << std::endl;
-                               co_return 300;
-                            })
-                            .Then(
-                              [](
-                                Resolve<int> const& resolve, Reject const&, double value
-                              ) -> Promise<int, true> {
-                                 [[maybe_unused]] auto result =
-                                   resolve(static_cast<int>(value) + 3);
-                                 assert(result);
-                                 co_return;
-                              }
-                            )};
+            auto prom_int{
+              prom2
+                .Then([](int value) -> Promise<double> {
+                   throw std::runtime_error("test");
+                   co_return value + 3;
+                })
+                .Then([](double value) -> Promise<double> {
+                   std::cout << "not evaluted" << std::endl;
+                   co_return value;
+                })
+                .Catch([](std::exception_ptr) -> Promise<int> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test caught" << std::endl;
+                   co_return 300;
+                })
+                .Then([](std::variant<int, double> const& value) -> Promise<double> {
+                   std::cout << "test2 uncaught" << std::endl;
+                   throw std::runtime_error("test3");
+                   co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
+                                                                : std::get<double>(value) + 8788;
+                })
+                .Catch([](std::exception_ptr) -> Promise<double> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test3 caught" << std::endl;
+                   co_return 300;
+                })
+                .Then([](Resolve<int> const& resolve, double value) -> Promise<int, true> {
+                   [[maybe_unused]] auto result = resolve(static_cast<int>(value) + 3);
+                   assert(result);
+                   co_return;
+                })
+            };
 
             auto prom3{
               MakePromise([&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
@@ -202,6 +203,12 @@ main() {
             [[maybe_unused]] auto result = (*resolver)(5);
             assert(result);
             co_await promall;
+
+            try {
+               co_await Test();
+            } catch (std::exception const& e) {
+               std::cout << "exc2? " << e.what() << std::endl;
+            }
          } catch (std::exception const& e) {
             std::cout << "exc? " << e.what() << std::endl;
          }

@@ -289,8 +289,7 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
-
-      if constexpr (!promise::WITH_RESOLVER<FUN>) {
+      {
          // Optimisation skip coroutine frame creation
 
          if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
@@ -546,7 +545,7 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Finally(FUN&& func) & {
-      if constexpr (!promise::WITH_RESOLVER<FUN>) {
+      {
          // Optimisation skip coroutine frame creation
 
          if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
@@ -773,8 +772,21 @@ public:
       auto& reject  = *resolver->reject_;
 
       auto promise = [&]() constexpr {
-         if constexpr (WITH_RESOLVER) {
-            return holder->func_(resolve, reject, std::forward<ARGS>(args)...);
+         if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
+            if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
+                          && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>) {
+               return holder->func_(resolve, reject, std::forward<ARGS>(args)...);
+            } else if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+               return holder->func_(resolve, std::forward<ARGS>(args)...);
+            } else {
+               return holder->func_(std::forward<ARGS>(args)...);
+            }
+         } else if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 1) {
+            if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+               return holder->func_(resolve, std::forward<ARGS>(args)...);
+            } else {
+               return holder->func_(std::forward<ARGS>(args)...);
+            }
          } else {
             return holder->func_(std::forward<ARGS>(args)...);
          }

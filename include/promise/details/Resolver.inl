@@ -141,7 +141,9 @@ struct Resolver {
     * @param exception Exception to store.
     * @return True if this call rejected the promise, false if it was already rejected.
     */
-   bool Reject(std::exception_ptr exception) { return Reject(exception, *this->resolved_); }
+   bool Reject(std::exception_ptr exception) {
+      return Reject(std::move(exception), *this->resolved_);
+   }
 
    /**
     * @brief Reject the promise with an exception and a shared resolved flag.
@@ -218,7 +220,7 @@ struct Resolver<void, WITH_RESOLVER> {
     * @param exception Exception to store.
     * @return True if this call rejected the promise, false if it was already rejected.
     */
-   bool Reject(std::exception_ptr exception) { return Reject(exception, *resolved_); }
+   bool Reject(std::exception_ptr exception) { return Reject(std::move(exception), *resolved_); }
    /**
     * @brief Reject the promise with an exception and a shared resolved flag.
     * @param exception Exception to store.
@@ -230,7 +232,7 @@ struct Resolver<void, WITH_RESOLVER> {
          std::unique_lock lock{promise_->mutex_};
 
          assert(!exception_);
-         exception_ = exception;
+         exception_ = std::move(exception);
 
          assert(promise_);
          promise_->OnResolved(lock);

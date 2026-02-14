@@ -44,8 +44,6 @@ namespace promise {
 template <class T, bool WITH_RESOLVER>
 struct Handle : public ValuePromise<T, std::is_void_v<T>> {
 protected:
-   friend class details::IPromise<T, WITH_RESOLVER>;
-
    struct PromiseType;
    using handle_type  = std::coroutine_handle<PromiseType>;
    using Promise      = details::IPromise<T, WITH_RESOLVER>;
@@ -316,6 +314,7 @@ protected:
    std::unique_ptr<Resolver<T, WITH_RESOLVER>>         resolver_{nullptr};
 
 public:
+   friend class details::IPromise<T, WITH_RESOLVER>;
    friend ValuePromise;
    friend struct Resolver<T, WITH_RESOLVER>;
 };
