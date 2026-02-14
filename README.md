@@ -83,6 +83,8 @@ Promise<void> Demo() {
 								// value is std::optional<int> because Catch returned void
 								co_return value.value_or(-1);
 							});
+}
+````
 ```cpp
 #include <promise/promise.h>
 #include <stdexcept>
