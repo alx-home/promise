@@ -33,8 +33,10 @@ namespace promise {
 
 namespace details {
 template <class T = void, bool WITH_RESOLVER = false>
+class IPromise;
+template <class T = void>
 class WPromise;
-}
+}  // namespace details
 
 template <class>
 struct IsFunction : std::false_type {};
@@ -62,7 +64,12 @@ struct return_<std::function<T(ARGS...)>> {
 };
 
 template <class T, bool WITH_RESOLVER>
-struct return_<details::WPromise<T, WITH_RESOLVER>> {
+struct return_<details::IPromise<T, WITH_RESOLVER>> {
+   using type = T;
+};
+
+template <class T>
+struct return_<details::WPromise<T>> {
    using type = T;
 };
 
@@ -82,7 +89,7 @@ template <class FUN>
 struct WithResolver : std::false_type {};
 
 template <class T>
-struct WithResolver<details::WPromise<T, true>> : std::true_type {};
+struct WithResolver<details::IPromise<T, true>> : std::true_type {};
 
 template <class FUN>
 static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
@@ -91,7 +98,7 @@ template <class FUN>
 struct IsPromise : std::false_type {};
 
 template <class T, bool WITH_RESOLVER>
-struct IsPromise<details::WPromise<T, WITH_RESOLVER>> : std::true_type {};
+struct IsPromise<details::IPromise<T, WITH_RESOLVER>> : std::true_type {};
 
 template <class FUN>
 static constexpr bool IS_PROMISE = IsPromise<return_t<FUN>>::value;

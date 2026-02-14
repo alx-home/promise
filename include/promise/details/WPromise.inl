@@ -26,7 +26,9 @@ SOFTWARE.
 
 #include "Promise.inl"
 
+#include <memory>
 #include <shared_mutex>
+#include <variant>
 
 namespace promise::details {
 
@@ -35,19 +37,26 @@ namespace promise::details {
  * @tparam T Value type (or void).
  * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
  */
-template <class T, bool WITH_RESOLVER>
+template <class T>
 class WPromise : public promise::VPromise {
 public:
-   using Details      = promise::details::Promise<T, WITH_RESOLVER>;
-   using promise_type = Details::promise_type;
+   using Promise  = promise::details::Promise<T, false>;
+   using RPromise = promise::details::Promise<T, true>;
+
+   using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
 
    /**
     * @brief Check if the promise can resume immediately.
     * @return True if ready to resume.
     */
    bool await_ready() const {
-      assert(details_);
-      return details_->await_ready();
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           return details->await_ready();
+        },
+        details_
+      );
    }
 
    /**
@@ -55,8 +64,13 @@ public:
     * @param h Awaiting coroutine handle.
     */
    auto await_suspend(std::coroutine_handle<> h) const {
-      assert(details_);
-      return details_->await_suspend(h);
+      return std::visit(
+        [h = std::move(h)](auto const& details) constexpr {
+           assert(details);
+           return details->await_suspend(std::move(h));
+        },
+        details_
+      );
    }
 
    /**
@@ -65,9 +79,338 @@ public:
     * @warning Throws if the promise was rejected.
     */
    auto await_resume() const noexcept(false) {
-      assert(details_);
-      return details_->await_resume();
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           return details->await_resume();
+        },
+        details_
+      );
    }
+
+   /**
+    * @brief Check if the promise is resolved or rejected.
+    * @return True if resolved or rejected.
+    */
+   bool Done() const noexcept(false) {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+           return details->IsDone(lock);
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Get the resolved value (valid only when done and resolved).
+    * @return Resolved value.
+    * @warning Undefined if called before resolution.
+    */
+   auto Value() const noexcept(false) {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+
+           assert(details->IsDone(lock));
+           return details->GetValue(lock);
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Get the stored exception (valid when rejected).
+    * @return Stored exception pointer.
+    */
+   std::exception_ptr Exception() const noexcept(false) {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+
+           assert(details->IsDone(lock));
+           return details->GetException(lock);
+        },
+        details_
+      );
+   }
+
+   template <class FUN, class SELF, class... ARGS>
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation to run on resolve.
+    * @param func Continuation to invoke on resolve.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   Then(this SELF&& self, FUN&& func, ARGS&&... args) {
+      return std::visit(
+        [&](auto&& details) constexpr {
+           assert(details);
+
+           if constexpr (std::is_lvalue_reference_v<SELF>) {
+              return details->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+           } else {
+              // Transfer ownership to next promise
+              return std::move(*details).Then(
+                std::move(details), std::forward<FUN>(func), std::forward<ARGS>(args)...
+              );
+           }
+        },
+        self.details_
+      );
+   }
+
+   template <class FUN, class SELF, class... ARGS>
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation to run on rejection.
+    * @param func Continuation to invoke on rejection.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
+      return std::visit(
+        [&](auto&& details) constexpr {
+           assert(details);
+
+           if constexpr (std::is_lvalue_reference_v<SELF>) {
+              return details->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
+           } else {
+              // Transfer ownership to next promise
+              return std::move(*details).Catch(
+                std::move(details), std::forward<FUN>(func), std::forward<ARGS>(args)...
+              );
+           }
+        },
+        self.details_
+      );
+   }
+
+   template <class FUN, class SELF>
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation that runs regardless of outcome.
+    * @param func Continuation to invoke after resolve or reject.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   Finally(this SELF&& self, FUN&& func) {
+      return std::visit(
+        [&](auto const& details) constexpr {
+           assert(details);
+
+           if constexpr (std::is_lvalue_reference_v<SELF>) {
+              return details->Finally(std::forward<FUN>(func));
+
+           } else {
+              // Transfer ownership to next promise
+              return std::move(*details).Finally(std::move(details), std::forward<FUN>(func));
+           }
+        },
+        self.details_
+      );
+   }
+
+   template <class... ARGS>
+   /**
+    * @brief Create a resolved promise without starting a coroutine.
+    * @param args Constructor args for the resolved value (if any).
+    * @return Resolved promise.
+    */
+   static constexpr auto Resolve(ARGS&&... args) {
+      return Promise::Resolve(std::forward<ARGS>(args)...);
+   }
+
+   template <class... ARGS>
+   /**
+    * @brief Create a rejected promise without starting a coroutine.
+    * @param args Constructor args for the rejection value (if any).
+    * @return Rejected promise.
+    */
+   static constexpr auto Reject(ARGS&&... args) {
+      return Promise::Reject(std::forward<ARGS>(args)...);
+   }
+
+   /**
+    * @brief Detach so the promise can live independently of this handle.
+    * @return Reference to promise details.
+    * @note Best practice: detach only when the promise must outlive this handle.
+    */
+   void Detach() && {
+      return std::visit(
+        [&](auto&& details) constexpr {
+           assert(details);
+           auto& details_ref = *details;
+           details_ref.Detach(std::move(details));
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Type-erased detach for VPromise.
+    */
+   void VDetach() && override { static_cast<WPromise&&>(*this).Detach(); }
+
+   template <class TYPE = promise::VPromise>
+   /**
+    * @brief Convert to a shared pointer of a type-erased promise.
+    * @return Shared pointer to a type-erased promise.
+    */
+   auto ToPointer() && {
+      return std::shared_ptr<TYPE>(static_cast<TYPE*>(new WPromise{std::move(details_)}));
+   }
+
+private:
+   Details details_{std::shared_ptr<Promise>{nullptr}};
+
+   /**
+    * @brief Type-erased awaitable for VPromise.
+    * @return Reference to a type-erased awaitable wrapper.
+    */
+   Awaitable& VAwait() final {
+      return std::visit(
+        [&](auto const& details) constexpr -> auto& {
+           assert(details);
+           return details->VAwait();
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Construct from shared promise details.
+    * @param details Shared promise state.
+    */
+   template <bool WITH_RESOLVER>
+   WPromise(std::shared_ptr<promise::details::Promise<T, WITH_RESOLVER>> details)
+      : details_(std::move(details)) {}
+
+   /**
+    * @brief Construct from shared promise details.
+    * @param details Shared promise state.
+    */
+   WPromise(Details details)
+      : details_(std::move(details)) {}
+
+   template <class, bool>
+   friend class IPromise;
+
+   friend Promise;
+   friend RPromise;
+   template <class, bool>
+   friend class ::promise::details::Promise;
+};
+
+/**
+ * @brief Promise handle that owns shared state and supports co_await.
+ * @tparam T Value type (or void).
+ * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
+ */
+template <class T, bool WITH_RESOLVER>
+class IPromise : public WPromise<T> {
+public:
+   using Parent       = WPromise<T>;
+   using Details      = promise::details::Promise<T, WITH_RESOLVER>;
+   using promise_type = Details::promise_type;
+
+   /**
+    * @brief Check if the promise can resume immediately.
+    * @return True if ready to resume.
+    */
+   using WPromise<T>::await_ready;
+
+   /**
+    * @brief Suspend the coroutine and register continuation.
+    * @param h Awaiting coroutine handle.
+    */
+   using WPromise<T>::await_suspend;
+
+   /**
+    * @brief Resume the await and return the resolved value or throw.
+    * @return Resolved value for non-void promises.
+    * @warning Throws if the promise was rejected.
+    */
+   using WPromise<T>::await_resume;
+
+   /**
+    * @brief Check if the promise is resolved or rejected.
+    * @return True if resolved or rejected.
+    */
+   using WPromise<T>::Done;
+
+   /**
+    * @brief Get the resolved value (valid only when done and resolved).
+    * @return Resolved value.
+    * @warning Undefined if called before resolution.
+    */
+   using WPromise<T>::Value;
+
+   using WPromise<T>::Exception;
+
+   /**
+    * @brief Chain a continuation to run on resolve.
+    * @param func Continuation to invoke on resolve.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   using WPromise<T>::Then;
+
+   /**
+    * @brief Chain a continuation to run on rejection.
+    * @param func Continuation to invoke on rejection.
+    * @param args Arguments forwarded to the continuation.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   using WPromise<T>::Catch;
+
+   /**
+    * @brief Chain a continuation that runs regardless of outcome.
+    * @param func Continuation to invoke after resolve or reject.
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   using WPromise<T>::Finally;
+
+   /**
+    * @brief Create a resolved promise without starting a coroutine.
+    * @param args Constructor args for the resolved value (if any).
+    * @return Resolved promise.
+    */
+   using WPromise<T>::Resolve;
+
+   /**
+    * @brief Create a rejected promise without starting a coroutine.
+    * @param args Constructor args for the rejection value (if any).
+    * @return Rejected promise.
+    */
+   using WPromise<T>::Reject;
+
+   /**
+    * @brief Detach so the promise can live independently of this handle.
+    * @return Reference to promise details.
+    * @note Best practice: detach only when the promise must outlive this handle.
+    */
+   using WPromise<T>::Detach;
+
+   /**
+    * @brief Type-erased detach for VPromise.
+    */
+   using WPromise<T>::VDetach;
+
+   /**
+    * @brief Convert to a shared pointer of a type-erased promise.
+    * @return Shared pointer to a type-erased promise.
+    */
+   using WPromise<T>::ToPointer;
 
    template <class SELF>
       requires(!WITH_RESOLVER)
@@ -96,7 +439,9 @@ public:
     */
    auto&&
    operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T, WITH_RESOLVER>>&& resolver) {
-      (*self.details_)(std::move(resolver));
+      using Promise = std::shared_ptr<promise::details::Promise<T, WITH_RESOLVER>>;
+      assert(std::holds_alternative<Promise>(self.details_));
+      (*std::get<Promise>(self.details_))(std::move(resolver));
 
       if constexpr (std::is_lvalue_reference_v<SELF>) {
          return self;
@@ -105,169 +450,25 @@ public:
       }
    }
 
-   /**
-    * @brief Check if the promise is resolved or rejected.
-    * @return True if resolved or rejected.
-    */
-   bool Done() const noexcept(false) {
-      assert(details_);
-      std::shared_lock lock{details_->mutex_};
-      return details_->IsDone(lock);
-   }
-
-   /**
-    * @brief Get the resolved value (valid only when done and resolved).
-    * @return Resolved value.
-    * @warning Undefined if called before resolution.
-    */
-   auto Value() const noexcept(false) {
-      assert(details_);
-      std::shared_lock lock{details_->mutex_};
-
-      assert(details_->IsDone(lock));
-      return details_->GetValue(lock);
-   }
-
-   /**
-    * @brief Get the stored exception (valid when rejected).
-    * @return Stored exception pointer.
-    */
-   std::exception_ptr Exception() const noexcept(false) {
-      assert(details_);
-      std::shared_lock lock{details_->mutex_};
-      return details_->GetException(lock);
-   }
-
-   template <class FUN, class SELF, class... ARGS>
-   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
-   /**
-    * @brief Chain a continuation to run on resolve.
-    * @param func Continuation to invoke on resolve.
-    * @param args Arguments forwarded to the continuation.
-    * @return Chained promise.
-    * @note Best practice: store the returned promise or call Detach().
-    */
-   Then(this SELF&& self, FUN&& func, ARGS&&... args) {
-      assert(self.details_);
-
-      if constexpr (std::is_lvalue_reference_v<SELF>) {
-         return self.details_->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
-      } else {
-         // Transfer ownership to next promise
-         return static_cast<Details&&>(*self.details_)
-           .Then(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
-      }
-   }
-
-   template <class FUN, class SELF, class... ARGS>
-   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
-   /**
-    * @brief Chain a continuation to run on rejection.
-    * @param func Continuation to invoke on rejection.
-    * @param args Arguments forwarded to the continuation.
-    * @return Chained promise.
-    * @note Best practice: store the returned promise or call Detach().
-    */
-   Catch(this SELF&& self, FUN&& func, ARGS&&... args) {
-      assert(self.details_);
-
-      if constexpr (std::is_lvalue_reference_v<SELF>) {
-         return self.details_->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
-      } else {
-         // Transfer ownership to next promise
-         return static_cast<Details&&>(*self.details_)
-           .Catch(std::move(self.details_), std::forward<FUN>(func), std::forward<ARGS>(args)...);
-      }
-   }
-
-   template <class FUN, class SELF>
-   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
-   /**
-    * @brief Chain a continuation that runs regardless of outcome.
-    * @param func Continuation to invoke after resolve or reject.
-    * @return Chained promise.
-    * @note Best practice: store the returned promise or call Detach().
-    */
-   Finally(this SELF&& self, FUN&& func) {
-      assert(self.details_);
-
-      if constexpr (std::is_lvalue_reference_v<SELF>) {
-         return self.details_->Finally(std::forward<FUN>(func));
-
-      } else {
-         // Transfer ownership to next promise
-         return static_cast<Details&&>(*self.details_)
-           .Finally(std::move(self.details_), std::forward<FUN>(func));
-      }
-   }
-
-   template <class... ARGS>
-   /**
-    * @brief Create a resolved promise without starting a coroutine.
-    * @param args Constructor args for the resolved value (if any).
-    * @return Resolved promise.
-    */
-   static constexpr auto Resolve(ARGS&&... args) {
-      return Details::Promise::Resolve(std::forward<ARGS>(args)...);
-   }
-
-   template <class... ARGS>
-   /**
-    * @brief Create a rejected promise without starting a coroutine.
-    * @param args Constructor args for the rejection value (if any).
-    * @return Rejected promise.
-    */
-   static constexpr auto Reject(ARGS&&... args) {
-      return Details::Promise::Reject(std::forward<ARGS>(args)...);
-   }
-
-   /**
-    * @brief Detach so the promise can live independently of this handle.
-    * @return Reference to promise details.
-    * @note Best practice: detach only when the promise must outlive this handle.
-    */
-   auto& Detach() && {
-      assert(details_);
-      auto& details = *details_;
-      return details.Detach(std::move(details_));
-   }
-
-   /**
-    * @brief Type-erased detach for VPromise.
-    */
-   void VDetach() && override { static_cast<WPromise&&>(*this).Detach(); }
-
-   template <class TYPE = promise::VPromise>
-   /**
-    * @brief Convert to a shared pointer of a type-erased promise.
-    * @return Shared pointer to a type-erased promise.
-    */
-   auto ToPointer() && {
-      return std::shared_ptr<TYPE>(static_cast<TYPE*>(new WPromise{std::move(details_)}));
-   }
-
 private:
-   std::shared_ptr<Details> details_{};
-
    /**
     * @brief Type-erased awaitable for VPromise.
     * @return Reference to a type-erased awaitable wrapper.
     */
-   Awaitable& VAwait() final { return details_->VAwait(); }
+   using WPromise<T>::VAwait;
 
    /**
     * @brief Construct from shared promise details.
     * @param details Shared promise state.
     */
-   WPromise(std::shared_ptr<Details> details)
-      : details_(std::move(details)) {}
+   using WPromise<T>::WPromise;
 
    /**
     * @brief Construct from coroutine handle.
     * @param handle Coroutine handle.
     */
-   WPromise(Details::handle_type handle)
-      : details_{[&handle]() constexpr {
+   IPromise(Details::handle_type handle)
+      : WPromise<T>{[&handle]() constexpr {
          struct MakeUniqueFriend : Details {
             MakeUniqueFriend(Details::handle_type handle)
                : Details(std::move(handle)) {}

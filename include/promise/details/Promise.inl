@@ -440,11 +440,11 @@ struct Refcount {
 template <class T, bool WITH_RESOLVER>
 struct Handle : public ValuePromise<T, std::is_void_v<T>> {
 protected:
-   friend class details::WPromise<T, WITH_RESOLVER>;
+   friend class details::IPromise<T, WITH_RESOLVER>;
 
    struct PromiseType;
    using handle_type  = std::coroutine_handle<PromiseType>;
-   using Promise      = details::WPromise<T, WITH_RESOLVER>;
+   using Promise      = details::IPromise<T, WITH_RESOLVER>;
    using ValuePromise = ValuePromise<T, std::is_void_v<T>>;
    using Locker       = std::unique_lock<std::shared_mutex>;
    struct Unlock {
@@ -500,8 +500,8 @@ protected:
 
       ~PromiseType() = default;
 
-      details::WPromise<T, WITH_RESOLVER> get_return_object() {
-         return details::WPromise<T, WITH_RESOLVER>{handle_type::from_promise(*this)};
+      details::IPromise<T, WITH_RESOLVER> get_return_object() {
+         return details::IPromise<T, WITH_RESOLVER>{handle_type::from_promise(*this)};
       }
 
       /**
@@ -595,8 +595,6 @@ protected:
       }
 
       friend Promise;
-      template <bool>
-      friend struct AwaitTransform;
       friend Handle;
    };
 
@@ -723,6 +721,9 @@ struct Function {
 };
 
 namespace details {
+template <class T>
+class WPromise;
+
 template <class T, bool WITH_RESOLVER>
 class Promise
    : public Handle<T, WITH_RESOLVER>
@@ -730,12 +731,15 @@ class Promise
    , public Refcount
 #endif  // PROMISE_MEMCHECK
 {
+public:
+   using promise_type = Handle<T, WITH_RESOLVER>::PromiseType;
+
 protected:
-   friend class details::WPromise<T, WITH_RESOLVER>;
+   friend class details::IPromise<T, WITH_RESOLVER>;
+   friend details::IPromise<T, WITH_RESOLVER>::Parent;
 
    using ValuePromise = Handle<T, WITH_RESOLVER>::ValuePromise;
    using handle_type  = Handle<T, WITH_RESOLVER>::handle_type;
-   using promise_type = Handle<T, WITH_RESOLVER>::PromiseType;
    using Locker       = typename Handle<T, WITH_RESOLVER>::Locker;
    using Unlock       = typename Handle<T, WITH_RESOLVER>::Unlock;
 
@@ -968,23 +972,22 @@ private:
                   if constexpr (IS_VOID) {
                      if constexpr (std::is_void_v<T2>) {
                         func(std::forward<ARGS>(args)...);
-                        return details::WPromise<T2, true>::Resolve();
+                        return details::WPromise<T2>::Resolve();
                      } else {
-                        return details::WPromise<T2, true>::Resolve(func(std::forward<ARGS>(args)...
-                        ));
+                        return details::WPromise<T2>::Resolve(func(std::forward<ARGS>(args)...));
                      }
                   } else {
                      if constexpr (std::is_void_v<T2>) {
                         func(this->GetValue(lock), std::forward<ARGS>(args)...);
-                        return details::WPromise<T2, true>::Resolve();
+                        return details::WPromise<T2>::Resolve();
                      } else {
-                        return details::WPromise<T2, true>::Resolve(
+                        return details::WPromise<T2>::Resolve(
                           func(this->GetValue(lock), std::forward<ARGS>(args)...)
                         );
                      }
                   }
                } catch (...) {
-                  return details::WPromise<T2, true>::Reject(std::current_exception());
+                  return details::WPromise<T2>::Reject(std::current_exception());
                }
             } else if constexpr (IS_VOID) {
                return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
@@ -1003,7 +1006,7 @@ private:
          return ::MakePromise(
            [func = std::forward<FUN>(func)](
              details::Promise<T, WITH_RESOLVER>& self, ARGS&&... args
-           ) -> details::WPromise<T2, false> {
+           ) -> details::IPromise<T2, false> {
               if constexpr (IS_VOID) {
                  co_await self;
                  co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
@@ -1023,8 +1026,8 @@ private:
 
          ::MakePromise(
            [func = std::forward<FUN>(func), resolve, reject](
-             details::WPromise<T, WITH_RESOLVER>& self, ARGS&&... args
-           ) -> details::WPromise<std::conditional_t<IS_VOID, void, void>, false> {
+             details::IPromise<T, WITH_RESOLVER>& self, ARGS&&... args
+           ) -> details::IPromise<std::conditional_t<IS_VOID, void, void>, false> {
               // std::conditional_t<IS_VOID, void, void> is used to delay the return type deduction
               // to avoid Promise<void> undefined type compilation error
               try {
@@ -1107,17 +1110,17 @@ private:
         "!"
       );
 
-      using return_t = std::remove_pointer_t<decltype([]() constexpr {
+      using Return = std::remove_pointer_t<decltype([]() constexpr {
          if constexpr (std::is_void_v<T2> && std::is_void_v<T>) {
-            return static_cast<details::WPromise<void, false>*>(nullptr);
+            return static_cast<details::IPromise<void, false>*>(nullptr);
          } else if constexpr (std::is_void_v<T2>) {
-            return static_cast<details::WPromise<std::optional<T>, false>*>(nullptr);
+            return static_cast<details::IPromise<std::optional<T>, false>*>(nullptr);
          } else if constexpr (std::is_void_v<T>) {
-            return static_cast<details::WPromise<std::optional<T2>, false>*>(nullptr);
+            return static_cast<details::IPromise<std::optional<T2>, false>*>(nullptr);
          } else if constexpr (std::is_same_v<T, T2>) {
-            return static_cast<details::WPromise<T2, false>*>(nullptr);
+            return static_cast<details::IPromise<T2, false>*>(nullptr);
          } else {
-            return static_cast<details::WPromise<std::variant<T2, T>, false>*>(nullptr);
+            return static_cast<details::IPromise<std::variant<T2, T>, false>*>(nullptr);
          }
       }())>;
 
@@ -1127,19 +1130,19 @@ private:
          if (std::shared_lock lock{this->mutex_}; !this->GetException(lock)) {
             if constexpr (std::is_void_v<T>) {
                if constexpr (std::is_void_v<T2>) {
-                  return return_t::Resolve();
+                  return WPromise<return_t<Return>>::Resolve();
                } else {
-                  return return_t::Resolve(std::optional<T2>{});
+                  return WPromise<return_t<Return>>::Resolve(std::optional<T2>{});
                }
             } else {
-               return return_t::Resolve(this->GetValue(lock));
+               return WPromise<return_t<Return>>::Resolve(this->GetValue(lock));
             }
          }  // @todo else
       }
 
       return MakePromise(
         [func =
-           std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> return_t {
+           std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> Return {
            using exception_t = std::remove_cvref_t<Exception>;
            ExceptionWrapper<exception_t> exc{};
 
@@ -1222,12 +1225,12 @@ private:
                   func();
 
                   if constexpr (IS_VOID) {
-                     return Promise<T, true>::Resolve();
+                     return WPromise<T>::Resolve();
                   } else {
-                     return Promise<T, true>::Resolve(this->GetValue(lock));
+                     return WPromise<T>::Resolve(this->GetValue(lock));
                   }
                } catch (...) {
-                  return Promise<T, true>::Reject(std::current_exception());
+                  return WPromise<T>::Reject(std::current_exception());
                }
             } else if constexpr (IS_VOID) {
                using promise_t = return_t<decltype(std::function{func})>;
@@ -1256,8 +1259,8 @@ private:
            [func = std::forward<FUN>(func)](
              promise::Resolve<T> const&           resolve,
              promise::Reject const&               reject,
-             details::WPromise<T, WITH_RESOLVER>& self
-           ) -> details::WPromise<T, true> {
+             details::IPromise<T, WITH_RESOLVER>& self
+           ) -> details::IPromise<T, true> {
               if constexpr (IS_VOID) {
                  std::exception_ptr exception;
                  try {
@@ -1305,8 +1308,8 @@ private:
            [func = std::forward<FUN>(func)](
              promise::Resolve<T> const&           resolve,
              promise::Reject const&               reject,
-             details::WPromise<T, WITH_RESOLVER>& self
-           ) -> details::WPromise<T, true> {
+             details::IPromise<T, WITH_RESOLVER>& self
+           ) -> details::IPromise<T, true> {
               std::exception_ptr exception;
 
               if constexpr (IS_VOID) {
@@ -1372,16 +1375,17 @@ public:
     */
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
-      details::WPromise<T, WITH_RESOLVER> promise{handle_type{}};
+      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
       auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
-      auto const details = promise.details_.get();
+      auto const details =
+        std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
       resolver->promise_ = details;
       details->resolver_ = std::move(resolver);
 
       details->resolver_->Resolve(std::forward<ARGS>(args)...);
 
-      return promise;
+      return WPromise<T>{std::move(promise)};
    }
 
    /**
@@ -1391,7 +1395,7 @@ public:
     */
    template <class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
-      details::WPromise<T, WITH_RESOLVER> promise{handle_type{}};
+      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
       auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
 
       auto const details = promise.details_.get();
@@ -1400,7 +1404,7 @@ public:
 
       details->resolver_->Reject(std::forward<ARGS>(args)...);
 
-      return promise;
+      return WPromise<T>{std::move(promise)};
    }
 
    /**
@@ -1443,16 +1447,19 @@ public:
          }
       }();
 
-      auto const details = promise.details_.get();
-      details->resolver_ = std::move(resolver);
-      details->function_ = std::move(holder);
+      {
+         auto const details =
+           std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
+         details->resolver_ = std::move(resolver);
+         details->function_ = std::move(holder);
 
-      promise.details_->handle_();
+         details->handle_();
+      }
 
       if constexpr (RPROMISE) {
-         return std::make_tuple(promise, &resolve, &reject);
+         return std::make_tuple(WPromise<T>{std::move(promise)}, &resolve, &reject);
       } else {
-         return promise;
+         return WPromise<T>{std::move(promise)};
       }
    }
 
@@ -1461,8 +1468,6 @@ private:
    std::vector<std::coroutine_handle<>> awaiters_{};
 
    friend Handle<T, WITH_RESOLVER>;
-   template <bool>
-   friend struct AwaitTransform;
 };
 }  // namespace details
 
@@ -1475,7 +1480,7 @@ template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
    return MakePromise(
-     [promise...]() mutable -> details::WPromise<std::tuple<std::conditional_t<
+     [promise...]() mutable -> details::IPromise<std::tuple<std::conditional_t<
                               std::is_void_v<return_t<PROMISE>>,
                               std::nullopt_t,
                               return_t<PROMISE>>...>> {
@@ -1592,11 +1597,13 @@ template <class T>
 static constexpr auto
 Pure() {
    auto [resolver, resolve, reject] = MakeResolver<T>();
-   auto promise = ([](Resolve<T> const&, Reject const&) -> details::WPromise<T, true> {
+   auto promise = ([](Resolve<T> const&, Reject const&) -> details::IPromise<T, true> {
       co_return;
    }(*resolve, *reject));
 
-   return std::make_tuple(std::move(promise(std::move(resolver))), resolve, reject);
+   return std::make_tuple(
+     details::WPromise<T>{std::move(promise(std::move(resolver)))}, resolve, reject
+   );
 }
 
 }  // namespace promise

@@ -27,7 +27,10 @@ SOFTWARE.
 #include "details/WPromise.inl"
 
 template <class T, bool WITH_RESOLVER = false>
-using Promise = promise::details::WPromise<T, WITH_RESOLVER>;
+using Promise = promise::details::IPromise<T, WITH_RESOLVER>;
+
+template <class T>
+using WPromise = promise::details::WPromise<T>;
 
 /**
  * @brief Public resolve handle alias.
