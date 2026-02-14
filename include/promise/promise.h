@@ -25,6 +25,7 @@ SOFTWARE.
 #pragma once
 
 #include "details/WPromise.inl"
+#include "details/helpers.inl"
 
 template <class T, bool WITH_RESOLVER = false>
 using Promise = promise::details::IPromise<T, WITH_RESOLVER>;
