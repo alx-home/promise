@@ -66,23 +66,23 @@ WPromise<int> FetchCachedOrAsync(bool use_cache) {
 }
 
 Promise<void> Demo() {
-	auto result = co_await GetAnswer();
+   auto result = co_await GetAnswer();
 
-	   auto chained = MakePromise([=]() -> Promise<int> {
-							   co_return result + 1;
-						   })
-						   .Then([](int value)  { return value * 2; })
-							.Then([](int value) -> Promise<int> { co_return value / 2; })
-							.Then([](int value) -> WPromise<int> {
-								return FetchCachedOrAsync(value > 0);
-							})
-							.Catch([](std::exception_ptr) -> WPromise<void> {
-								return Promise<void>::Resolve();
-							})
-							.Then([](std::optional<int> const& value) -> Promise<int> {
-								// value is std::optional<int> because Catch returned void
-								co_return value.value_or(-1);
-							});
+      auto chained = MakePromise([=]() -> Promise<int> {
+                        co_return result + 1;
+                     })
+                     .Then([](int value)  { return value * 2; })
+                     .Then([](int value) -> Promise<int> { co_return value / 2; })
+                     .Then([](int value) -> WPromise<int> {
+                        return FetchCachedOrAsync(value > 0);
+                     })
+                     .Catch([](std::exception_ptr) -> WPromise<void> {
+                        return Promise<void>::Resolve();
+                     })
+                     .Then([](std::optional<int> const& value) -> Promise<int> {
+                        // value is std::optional<int> because Catch returned void
+                        co_return value.value_or(-1);
+                     });
 }
 ```
 
