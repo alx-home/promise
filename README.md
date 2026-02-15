@@ -206,6 +206,24 @@ auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promis
 auto value = co_await prom;
 ```
 
+Reject convenience helpers:
+
+```cpp
+#include <promise/promise.h>
+#include <stdexcept>
+
+auto prom2 = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
+	static constexpr bool REJECT_WITH_EXCEPTION = true;
+
+	if constexpr (REJECT_WITH_EXCEPTION) {
+		reject(std::runtime_error("failed"));
+	} else {
+		reject.Apply<std::runtime_error>("failed");
+	}
+	co_return;
+});
+```
+
 ## `Promise::Resolve` and `Promise::Reject`
 
 Use these static helpers to create an already-resolved or already-rejected promise without
@@ -343,15 +361,9 @@ Catch argument rules:
 - Using a specific exception type by const reference behaves like `try { } catch (const T&) { }`.
 - A `Catch(std::exception_ptr)` handler always runs for any thrown exception.
 - A `Catch(const T&)` handler runs only when the exception is dynamically castable to `T`.
-- This typed `Catch(const T&)` behavior is a bit hacky: C++ has no standard way to cast an
-  `std::exception_ptr`, and you cannot both `rethrow_exception` and `co_await` in the same
-  catch block. It currently relies on MSVC internals and is only supported on specific MSVC
-  versions.
-- Supported MSVC versions for this behavior: 2019 (v1929) and 2022 (v1943).
-- To support other compilers/versions, update the `ExceptionWrapper` implementation in
-  `include/promise/details/ExceptionWrapper.inl` (the block guarded by the `_MSC_VER` static assert).
-  That is the only place using compiler-specific exception layout to extract typed exceptions from
-  `std::exception_ptr`.
+- Typed `Catch(const T&)` is implemented by rethrowing the stored `std::exception_ptr` and
+  catching `const T&`, so it works on standard-conforming compilers and only matches when the
+  stored exception is of type `T`.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
