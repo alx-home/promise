@@ -501,15 +501,6 @@ private:
 
       static constexpr bool IS_EXC_PTR =
         std::is_same_v<std::remove_cvref_t<Exception>, std::exception_ptr>;
-      static constexpr bool IS_VALID_V =
-        IS_EXC_PTR
-        || (std::is_lvalue_reference_v<Exception> && std::is_const_v<std::remove_reference_t<Exception>>);
-      static_assert(
-        IS_VALID_V,
-        "Catch promise argument must be : std::exception_ptr or a "
-        "const reference to an exception "
-        "!"
-      );
 
       using Return = std::remove_pointer_t<decltype([]() constexpr {
          if constexpr (std::is_void_v<T2> && std::is_void_v<T>) {
@@ -570,25 +561,35 @@ private:
 
            assert(exc);
 
-           auto exception_wrapper = [&](auto&& invoke) -> decltype(auto) {
+           auto exception_wrapper = [&](auto&& invoke) constexpr -> decltype(auto) {
               if constexpr (IS_EXC_PTR) {
                  return invoke(exc);
               } else {
                  try {
                     std::rethrow_exception(exc);
-                 } catch (exception_t const& e) {
-                    return invoke(e);
+                 } catch (exception_t const& exc) {
+                    if constexpr (IS_PROMISE<FUN> && std::is_lvalue_reference_v<Exception>) {
+                       // Copy exception to avoid dangling reference if func captures it by
+                       // reference and is called after this scope
+                       return MakePromise([exc, invoke = std::move(invoke)]() -> Return {
+                          co_return co_await invoke(exc);
+                       });
+                    } else {
+                       return invoke(exc);
+                    }
                  }
               }
            };
 
            if constexpr (std::is_void_v<T2>) {
               if constexpr (IS_PROMISE<FUN>) {
-                 co_await exception_wrapper([&](auto const& ex) {
+                 co_await exception_wrapper([&](auto const& ex) constexpr {
                     return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
                  });
               } else {
-                 exception_wrapper([&](auto const& ex) { func(ex, std::forward<ARGS>(args)...); });
+                 exception_wrapper([&](auto const& ex) constexpr {
+                    func(ex, std::forward<ARGS>(args)...);
+                 });
               }
 
               if constexpr (std::is_void_v<T>) {

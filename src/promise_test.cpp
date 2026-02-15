@@ -34,12 +34,11 @@ SOFTWARE.
 #include <windef.h>
 #include <winnt.h>
 #include <winreg.h>
+#include <exception>
 
 WPromise<void>
 Test() {
-   return MakePromise([]() -> Promise<void> {
-      throw std::runtime_error("TEST_EXCEPTION");
-   });
+   return MakePromise([]() -> Promise<void> { throw std::runtime_error("TEST_EXCEPTION"); });
 }
 
 #ifdef _WIN32
@@ -222,11 +221,23 @@ main() {
                co_return;
             }).Detach();
 
+            auto const prom_catch_asyn{
+              MakePromise([&]() -> Promise<void> {
+                 throw std::runtime_error("test async");
+                 co_return;
+              }).Catch([&](std::runtime_error const& exc) -> Promise<std::string> {
+                 co_await promall;
+                 co_return exc.what();
+              })
+            };
+
             std::this_thread::sleep_for(std::chrono::seconds(1));
             // MakeReject<std::runtime_error>(*rejecter, "titi");
             [[maybe_unused]] auto result = (*resolver)(5);
             assert(result);
             co_await promall;
+
+            std::cout << "prom_catch_asyn " << *(co_await prom_catch_asyn) << std::endl;
 
             try {
                co_await MakePromise([&]() -> WPromise<void> { return Test(); });
