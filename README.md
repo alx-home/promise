@@ -364,6 +364,8 @@ Catch argument rules:
 - Typed `Catch(const T&)` is implemented by rethrowing the stored `std::exception_ptr` and
   catching `const T&`, so it works on standard-conforming compilers and only matches when the
   stored exception is of type `T`.
+ - For typed `Catch(const T&)` that returns a promise, the exception is copied before the
+	 continuation runs to avoid dangling references when the continuation is async.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
