@@ -49,8 +49,15 @@ protected:
    using Promise      = details::IPromise<T, WITH_RESOLVER>;
    using ValuePromise = ValuePromise<T, std::is_void_v<T>>;
    using Locker       = std::unique_lock<std::shared_mutex>;
+   /**
+    * @brief Unlock helper for lock guards.
+    */
    struct Unlock {
       Locker& lock_;
+
+      /**
+       * @brief Unlock the lock on destruction.
+       */
       ~Unlock() {
          if (lock_) {
             lock_.unlock();
@@ -58,12 +65,16 @@ protected:
       }
    };
 
+   /**
+    * @brief Returned promise type for this handle.
+    */
    static constexpr bool IS_VOID = WITH_RESOLVER || std::is_void_v<T>;
 
    struct VoidPromiseType {
    public:
       /**
        * @brief Return void from the coroutine.
+       *
        * @param self Promise type context.
        */
       template <class SELF>
@@ -76,6 +87,7 @@ protected:
    public:
       /**
        * @brief Return a value from the coroutine.
+       *
        * @param self Promise type context.
        * @param value Value to return.
        */
@@ -102,12 +114,18 @@ protected:
 
       ~PromiseType() = default;
 
+      /**
+       * @brief Get the return object for this promise.
+       *
+       * @return Promise details reference.
+       */
       details::IPromise<T, WITH_RESOLVER> get_return_object() {
          return details::IPromise<T, WITH_RESOLVER>{handle_type::from_promise(*this)};
       }
 
       /**
        * @brief Get the parent promise details.
+       *
        * @return Parent promise details pointer.
        */
       Parent* GetParent() const { return parent_; }
@@ -119,9 +137,11 @@ protected:
 
          /**
           * @brief Suspend the coroutine at initial suspension.
+          *
           * @param h Coroutine handle.
           */
          constexpr void await_suspend(std::coroutine_handle<> h) const noexcept { (void)h; }
+
          /**
           * @brief Complete initial suspend and attach a resolver.
           * @note Best practice: create resolver promises via MakePromise/MakeRPromise.
@@ -144,6 +164,7 @@ protected:
       using FinalSuspend = std::suspend_never;
       /**
        * @brief Initial suspend hook.
+       *
        * @return Awaitable initial suspend object.
        */
       InitSuspend initial_suspend() {
@@ -153,6 +174,7 @@ protected:
 
       /**
        * @brief Final suspend hook.
+       *
        * @return Final suspend awaitable.
        */
       FinalSuspend final_suspend() noexcept {
@@ -185,6 +207,7 @@ protected:
 
       /**
        * @brief Forward return values to the promise implementation.
+       *
        * @param value Values to return.
        */
       template <class... FROM>
@@ -200,6 +223,11 @@ protected:
       friend Handle;
    };
 
+   /**
+    * @brief Construct a promise handle from a coroutine handle.
+    *
+    * @param handle Coroutine handle to manage.
+    */
    explicit Handle(handle_type handle)
       : handle_{std::move(handle)} {
       if (handle_) {
@@ -211,7 +239,9 @@ protected:
 public:
    /**
     * @brief Check if resolved using an existing lock.
+    *
     * @param lock Active lock for thread-safe access.
+    *
     * @return True if resolved.
     */
    template <class SELF>
@@ -221,7 +251,9 @@ public:
 
    /**
     * @brief Check if done using an existing lock.
+    *
     * @param lock Active lock for thread-safe access.
+    *
     * @return True if resolved or rejected.
     */
    template <class SELF>
@@ -231,6 +263,7 @@ public:
 
    /**
     * @brief Check if done.
+    *
     * @return True if resolved or rejected.
     */
    template <class SELF>
@@ -241,6 +274,7 @@ public:
 
    /**
     * @brief Resume awaiters once resolved.
+    *
     * @param lock Active lock for thread-safe access.
     */
    template <class SELF>
@@ -265,7 +299,9 @@ public:
 
    /**
     * @brief Detach the promise details from this handle.
+    *
     * @param self Shared ownership of the promise details.
+    *
     * @return Reference to promise details.
     */
    details::Promise<T, WITH_RESOLVER>& Detach(
@@ -297,7 +333,9 @@ public:
 
    /**
     * @brief Check if the coroutine handle is cleared.
+    *
     * @param lock Active lock for thread-safe access.
+    *
     * @return True if the coroutine is complete.
     */
    bool Done(Lock lock) const {

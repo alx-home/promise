@@ -37,18 +37,22 @@ namespace promise {
 struct Reject : std::enable_shared_from_this<Reject> {
    /**
     * @brief Construct a rejector from an implementation callback.
+    *
     * @param impl Callback invoked on reject.
     */
    Reject(std::function<void(std::exception_ptr)> impl);
 
    /**
     * @brief Reject the promise with an exception.
+    *
     * @param exception Exception to store.
+    *
     * @return True if this call rejected the promise, false if it was already rejected.
     */
    bool operator()(std::exception_ptr exception) const;
    /**
     * @brief Check whether this rejector can still reject.
+    *
     * @return True if already rejected, false otherwise.
     */
    operator bool() const;

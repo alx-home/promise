@@ -41,6 +41,7 @@ struct VPromise {
       virtual ~Awaitable() = default;
       /**
        * @brief Check if the await can complete synchronously.
+       *
        * @return True if ready to resume.
        */
       virtual bool await_ready() = 0;
@@ -50,6 +51,7 @@ struct VPromise {
       virtual void await_resume() = 0;
       /**
        * @brief Suspend the coroutine and register continuation.
+       *
        * @param h Awaiting coroutine handle.
        */
       virtual void await_suspend(std::coroutine_handle<> h) = 0;

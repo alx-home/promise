@@ -34,9 +34,12 @@ struct Reject;
 
 /**
  * @brief Build a Promise from a std::function.
+ *
  * @tparam FUN Function type (std::function).
+ *
  * @param func Callable that returns Promise<T> or T.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
@@ -46,9 +49,12 @@ MakePromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Build a Promise from a generic callable.
+ *
  * @tparam FUN Callable type.
+ *
  * @param func Callable that returns Promise<T> or T.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
@@ -58,9 +64,12 @@ MakePromise(FUN&& func, ARGS&&... args);
 
 /**
  * @brief Build a resolver-style Promise from a std::function.
+ *
  * @tparam FUN Function type (std::function).
  * @param func Callable that returns Promise<T, true>.
+ *
  * @param args Arguments forwarded to the callable (after resolver args).
+ *
  * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
@@ -69,9 +78,12 @@ template <class FUN, class... ARGS>
 
 /**
  * @brief Build a resolver-style Promise from a generic callable.
+ *
  * @tparam FUN Callable type.
+ *
  * @param func Callable that returns Promise<T, true>.
  * @param args Arguments forwarded to the callable (after resolver args).
+ *
  * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
@@ -80,11 +92,15 @@ template <class FUN, class... ARGS>
 
 /**
  * @brief Reject a promise with a constructed exception.
+ *
  * @tparam EXCEPTION Exception type to construct.
  * @tparam RELAXED When true, ignore double-rejects.
+ *
  * @param reject Reject handle.
  * @param args Constructor args for EXCEPTION.
+ *
  * @return True if rejected, false if already rejected.
+ *
  * @warning When RELAXED is false, a double reject throws.
  */
 template <class EXCEPTION, bool RELAXED = true, class... ARGS>
@@ -92,9 +108,11 @@ bool MakeReject(promise::Reject const& reject, ARGS&&... args);
 
 namespace promise {
 /**
- * @brief Build a promise and its resolve/reject handles.
- * @treturn Tuple-like result (promise, resolve, reject).
- * @return Tuple (promise, resolve, reject).
+ * @brief Create a pure promise and its resolver.
+ *
+ * @tparam T Promise value type.
+ *
+ * @return Tuple of (promise, resolve handle, reject handle).
  */
 template <class T>
 static constexpr auto Pure();

@@ -34,8 +34,16 @@ namespace promise::details {
 
 /**
  * @brief Promise handle that owns shared state and supports co_await.
+ *
+ * This class is the public-facing handle over the shared promise details. It provides
+ * awaitable behavior and exposes state inspection and chaining helpers (Then/Catch/Finally)
+ * without revealing whether the underlying promise is resolver-less or resolver-based.
+ *
  * @tparam T Value type (or void).
  * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
+ *
+ * @note Resolver is attached on first start (MakePromise or coroutine initial_suspend).
+ * @note State queries (Done/Value/Exception) assume the promise has been started.
  */
 template <class T>
 class WPromise : public promise::VPromise {
@@ -47,6 +55,7 @@ public:
 
    /**
     * @brief Check if the promise can resume immediately.
+    *
     * @return True if ready to resume.
     */
    bool await_ready() const {
@@ -61,6 +70,7 @@ public:
 
    /**
     * @brief Suspend the coroutine and register continuation.
+    *
     * @param h Awaiting coroutine handle.
     */
    auto await_suspend(std::coroutine_handle<> h) const {
@@ -75,6 +85,7 @@ public:
 
    /**
     * @brief Resume the await and return the resolved value or throw.
+    *
     * @return Resolved value for non-void promises.
     * @warning Throws if the promise was rejected.
     */
@@ -90,6 +101,7 @@ public:
 
    /**
     * @brief Check if the promise is resolved or rejected.
+    *
     * @return True if resolved or rejected.
     */
    bool Done() const noexcept(false) {
@@ -105,7 +117,9 @@ public:
 
    /**
     * @brief Get the resolved value (valid only when done and resolved).
+    *
     * @return Resolved value.
+    *
     * @warning Undefined if called before resolution.
     */
    auto Value() const noexcept(false) {
@@ -123,6 +137,7 @@ public:
 
    /**
     * @brief Get the stored exception (valid when rejected).
+    *
     * @return Stored exception pointer.
     */
    std::exception_ptr Exception() const noexcept(false) {
@@ -142,8 +157,13 @@ public:
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
    /**
     * @brief Chain a continuation to run on resolve.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param func Continuation to invoke on resolve.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     * @note Best practice: store the returned promise or call Detach().
     */
@@ -169,8 +189,13 @@ public:
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
    /**
     * @brief Chain a continuation to run on rejection.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param func Continuation to invoke on rejection.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     * @note Best practice: store the returned promise or call Detach().
     */
@@ -196,7 +221,11 @@ public:
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
    /**
     * @brief Chain a continuation that runs regardless of outcome.
+    *
+    * @tparam FUN Type of the continuation function.
+    *
     * @param func Continuation to invoke after resolve or reject.
+    *
     * @return Chained promise.
     * @note Best practice: store the returned promise or call Detach().
     */
@@ -220,7 +249,11 @@ public:
    template <class... ARGS>
    /**
     * @brief Create a resolved promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the resolved value constructor.
+    *
     * @param args Constructor args for the resolved value (if any).
+    *
     * @return Resolved promise.
     */
    static constexpr auto Resolve(ARGS&&... args) {
@@ -230,7 +263,11 @@ public:
    template <class... ARGS>
    /**
     * @brief Create a rejected promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the rejection value constructor.
+    *
     * @param args Constructor args for the rejection value (if any).
+    *
     * @return Rejected promise.
     */
    static constexpr auto Reject(ARGS&&... args) {
@@ -239,6 +276,7 @@ public:
 
    /**
     * @brief Detach so the promise can live independently of this handle.
+    *
     * @return Reference to promise details.
     * @note Best practice: detach only when the promise must outlive this handle.
     */
@@ -261,6 +299,9 @@ public:
    template <class TYPE = promise::VPromise>
    /**
     * @brief Convert to a shared pointer of a type-erased promise.
+    *
+    * @tparam TYPE Type of the type-erased promise (defaults to VPromise).
+    *
     * @return Shared pointer to a type-erased promise.
     */
    auto ToPointer() && {
@@ -272,6 +313,7 @@ private:
 
    /**
     * @brief Type-erased awaitable for VPromise.
+    *
     * @return Reference to a type-erased awaitable wrapper.
     */
    Awaitable& VAwait() final {
@@ -286,6 +328,9 @@ private:
 
    /**
     * @brief Construct from shared promise details.
+    *
+    * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
+    *
     * @param details Shared promise state.
     */
    template <bool WITH_RESOLVER>
@@ -294,6 +339,7 @@ private:
 
    /**
     * @brief Construct from shared promise details.
+    *
     * @param details Shared promise state.
     */
    WPromise(Details details)
@@ -310,6 +356,7 @@ private:
 
 /**
  * @brief Promise handle that owns shared state and supports co_await.
+ *
  * @tparam T Value type (or void).
  * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
  */

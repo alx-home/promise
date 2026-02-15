@@ -40,8 +40,10 @@ SOFTWARE.
 
 /**
  * @brief Build a Promise from a generic callable.
+ *
  * @param func Callable returning a Promise or value.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
@@ -53,8 +55,10 @@ MakePromise(FUN&& func, ARGS&&... args) {
 
 /**
  * @brief Reject a promise by constructing an exception.
+ *
  * @param reject Reject handle.
  * @param args Constructor args for EXCEPTION.
+ *
  * @return True if rejected, false if already rejected.
  * @warning When RELAXED is false, a double reject throws.
  */
@@ -83,13 +87,11 @@ MakeReject(ARGS&&... args) {
 }
 
 namespace promise {
-struct Terminate : std::runtime_error {
-   using std::runtime_error::runtime_error;
-};
-
 /**
  * @brief Await all promises and return a combined result.
+ *
  * @param promise Promises to await.
+ *
  * @return Tuple of resolved values (std::nullopt_t for void).
  */
 template <class... PROMISE>
@@ -115,8 +117,10 @@ All(PROMISE&&... promise) {
 
 /**
  * @brief Build a Promise from a std::function.
+ *
  * @param func Callable returning a Promise or value.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
@@ -132,8 +136,10 @@ MakePromise(FUN&& func, ARGS&&... args) {
 
 /**
  * @brief Build a resolver-style Promise from a std::function.
+ *
  * @param func Callable returning a resolver-style Promise.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed resolver-style promise or tuple.
  */
 template <class FUN, class... ARGS>
@@ -149,8 +155,10 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
 
 /**
  * @brief Build a resolver-style Promise from a generic callable.
+ *
  * @param func Callable returning a resolver-style Promise.
  * @param args Arguments forwarded to the callable.
+ *
  * @return Constructed resolver-style promise or tuple.
  */
 template <class FUN, class... ARGS>
@@ -162,6 +170,7 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
 
 /**
  * @brief Build a resolver and its resolve/reject handles.
+ *
  * @return Tuple (resolver, resolve, reject).
  */
 template <class T>
@@ -175,6 +184,7 @@ namespace promise {
 
 /**
  * @brief Build a promise and its resolve/reject handles.
+ *
  * @return Tuple (promise, resolve, reject).
  */
 template <class T>

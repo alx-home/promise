@@ -43,16 +43,44 @@ SOFTWARE.
 #include <variant>
 
 namespace promise {
+/**
+ * @brief Type-erased awaitable wrapper for promises.
+ *
+ * This class allows promises to be awaited without knowing their concrete type.
+ */
 struct Function {
    virtual ~Function() = default;
 };
 }  // namespace promise
 
 namespace promise::details {
-
 template <class T>
 class WPromise;
 
+/**
+ * @brief Promise coroutine implementation with optional resolver support.
+ *
+ * This class implements the promise_type for C++20 coroutines, providing awaitable
+ * semantics and continuation chaining. It supports two modes:
+ * - Resolver-less mode (WITH_RESOLVER=false): Promise completes via co_return
+ * - Resolver mode (WITH_RESOLVER=true): Promise completes via external resolver
+ *
+ * @tparam T The value type that the promise resolves to. Can be void for promises
+ *           that don't produce a value.
+ * @tparam WITH_RESOLVER Boolean flag indicating whether the promise uses an external
+ *                       resolver (true) or completes via co_return (false).
+ *
+ * The class provides:
+ * - Coroutine awaitable interface (await_ready, await_suspend, await_resume)
+ * - Promise chaining via Then(), Catch(), and Finally() methods
+ * - Static factory methods for creating resolved/rejected promises
+ * - Thread-safe access through internal locking mechanisms
+ * - Exception handling and propagation through the promise chain
+ *
+ * @note Move operations are deleted; promises cannot be moved or copied.
+ *       Move operations are handled in the WPromise wrapper, which manages shared ownership of the
+ * promise details.
+ */
 template <class T, bool WITH_RESOLVER>
 class Promise
    : public Handle<T, WITH_RESOLVER>
@@ -77,6 +105,11 @@ protected:
 private:
    using Handle<T, WITH_RESOLVER>::Handle;
 
+   /**
+    * @brief Constructor for the Promise class.
+    *
+    * @param handle Coroutine handle to manage.
+    */
    explicit Promise(handle_type handle)
       : Handle<T, WITH_RESOLVER>(std::move(handle))
    //
@@ -87,6 +120,12 @@ private:
    }
 
 public:
+   /**
+    * @brief Destructor for the Promise class.
+    *
+    * Ensures that the coroutine handle is properly cleaned up and that any unresolved promises are
+    * detected in debug mode.
+    */
    ~Promise() {
       if (this->handle_) {
          assert(this->self_owned_);
@@ -102,6 +141,7 @@ public:
 
    /**
     * @brief Check if the promise can resume immediately.
+    *
     * @return True if ready to resume.
     */
    bool await_ready() {
@@ -111,6 +151,7 @@ public:
 
    /**
     * @brief Suspend the coroutine and register continuation.
+    *
     * @param h Awaiting coroutine handle.
     */
    void await_suspend(std::coroutine_handle<> h) {
@@ -125,6 +166,7 @@ public:
 
    /**
     * @brief Resume the await and return the resolved value or throw.
+    *
     * @return Resolved value for non-void promises.
     */
    auto await_resume() noexcept(false) {
@@ -151,6 +193,7 @@ private:
       requires(!WITH_RESOLVER)
    /**
     * @brief Start a resolver-less promise.
+    *
     * @return Coroutine handle result.
     */
    auto operator()() {
@@ -161,7 +204,9 @@ private:
       requires(WITH_RESOLVER)
    /**
     * @brief Start a resolver-style promise with a resolver.
+    *
     * @param resolver Resolver to drive the promise.
+    *
     * @return Coroutine handle result.
     */
    auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
@@ -172,6 +217,7 @@ private:
 
    /**
     * @brief Get a type-erased awaitable wrapper.
+    *
     * @return Reference to a heap-allocated awaitable wrapper.
     * @warning The wrapper is deleted in await_resume.
     */
@@ -184,6 +230,7 @@ private:
       {
          /**
           * @brief Construct a type-erased awaitable.
+          *
           * @param self Promise details to await.
           */
          Awaitable(details::Promise<T, WITH_RESOLVER>& self)
@@ -197,6 +244,7 @@ private:
 
          /**
           * @brief Check if the await can complete synchronously.
+          *
           * @return True if ready to resume.
           */
          bool await_ready() final { return self_.await_ready(); }
@@ -212,6 +260,7 @@ private:
 
          /**
           * @brief Suspend the coroutine and register continuation.
+          *
           * @param h Awaiting coroutine handle.
           */
          void await_suspend(std::coroutine_handle<> h) final { self_.await_suspend(h); }
@@ -225,7 +274,9 @@ private:
 
    /**
     * @brief Get the stored exception using an existing lock.
+    *
     * @param lock Active lock for thread-safe access.
+    *
     * @return Stored exception pointer.
     */
    auto const& GetException(Lock lock) {
@@ -236,8 +287,10 @@ private:
 
    /**
     * @brief Register an awaiting coroutine.
+    *
     * @param h Awaiting coroutine handle.
     * @param lock Active lock for thread-safe access.
+    *
     * @return True if registered.
     */
    bool Await(std::coroutine_handle<> h, Lock lock) {
@@ -248,7 +301,9 @@ private:
 
    /**
     * @brief Check whether the promise is ready.
+    *
     * @param lock Active lock for thread-safe access.
+    *
     * @return True if ready to resume.
     */
    bool Ready(Lock lock) {
@@ -261,6 +316,9 @@ private:
 
    /**
     * @brief Forward return values to the resolver.
+    *
+    * @tparam FROM Types of values to resolve with.
+    *
     * @param value Values to resolve with.
     */
    template <class... FROM>
@@ -282,8 +340,13 @@ private:
 
    /**
     * @brief Chain a continuation to run on resolve.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param func Continuation to invoke on resolve.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     */
    template <class FUN, class... ARGS>
@@ -392,9 +455,14 @@ private:
 
    /**
     * @brief Chain a continuation on an rvalue promise handle.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param self Owning shared pointer to promise details.
     * @param func Continuation to invoke on resolve.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     */
    template <class FUN, class... ARGS>
@@ -407,8 +475,13 @@ private:
 
    /**
     * @brief Chain a continuation to run on rejection.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param func Continuation to invoke on rejection.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     */
    template <class FUN, class... ARGS>
@@ -542,9 +615,14 @@ private:
 
    /**
     * @brief Chain a rejection continuation on an rvalue promise handle.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param self Owning shared pointer to promise details.
     * @param func Continuation to invoke on rejection.
     * @param args Arguments forwarded to the continuation.
+    *
     * @return Chained promise.
     */
    template <class FUN, class... ARGS>
@@ -557,7 +635,12 @@ private:
 
    /**
     * @brief Chain a continuation that runs regardless of outcome.
+    *
+    * @tparam FUN Type of the continuation function.
+    * @tparam ARGS Types of arguments to forward to the continuation.
+    *
     * @param func Continuation to invoke after resolve or reject.
+    *
     * @return Chained promise.
     */
    template <class FUN, class... ARGS>
@@ -702,8 +785,12 @@ private:
 
    /**
     * @brief Chain a finally continuation on an rvalue promise handle.
+    *
+    * @tparam FUN Type of the continuation function.
+    *
     * @param self Owning shared pointer to promise details.
     * @param func Continuation to invoke after resolve or reject.
+    *
     * @return Chained promise.
     */
    template <class FUN>
@@ -716,7 +803,11 @@ private:
 public:
    /**
     * @brief Create a resolved promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the resolver.
+    *
     * @param args Constructor args for the resolved value (if any).
+    *
     * @return Resolved promise.
     */
    template <class... ARGS>
@@ -736,7 +827,11 @@ public:
 
    /**
     * @brief Create a rejected promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the resolver.
+    *
     * @param args Constructor args for the rejection value (if any).
+    *
     * @return Rejected promise.
     */
    template <class... ARGS>
@@ -758,8 +853,14 @@ public:
 
    /**
     * @brief Create a promise from a callable and optional resolver.
+    **
+    * @tparam RPROMISE Boolean flag indicating whether to return a tuple with resolver and rejector.
+    * @tparam FUN Type of the callable.
+    * @tparam ARGS Types of arguments to forward to the callable.
+    **
     * @param func Callable used to produce the promise.
     * @param args Arguments forwarded to the callable.
+    *
     * @return Promise or tuple when RPROMISE is true.
     */
    template <bool RPROMISE, class FUN, class... ARGS>

@@ -32,10 +32,13 @@ SOFTWARE.
 namespace promise {
 
 namespace details {
+
 template <class T = void, bool WITH_RESOLVER = false>
 class IPromise;
+
 template <class T = void>
 class WPromise;
+
 }  // namespace details
 
 template <class>
@@ -43,9 +46,19 @@ struct IsFunction : std::false_type {};
 template <class FUN>
 struct IsFunction<std::function<FUN>> : std::true_type {};
 
+/**
+ * @brief Check if a type is a std::function.
+ *
+ * @tparam FUN Type to check.
+ */
 template <class FUN>
 static constexpr bool IS_FUNCTION = IsFunction<std::remove_cvref_t<FUN>>::value;
 
+/**
+ * @brief Check if a type can be constructed into a std::function.
+ *
+ * @tparam FUN Type to check.
+ */
 template <class FUN>
 concept function_constructible = requires(FUN fun) { std::function{fun}; };
 
@@ -73,6 +86,12 @@ struct return_<details::WPromise<T>> {
    using type = T;
 };
 
+/**
+ * @brief Get the return type of a callable.
+ * return_t<return_t<FUN>> is the return type of a callable that returns a promise.
+ *
+ * @tparam FUN Callable type.
+ */
 template <class FUN>
 using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
 
@@ -87,9 +106,19 @@ struct Reject;
 template <class T>
 struct IsResolver<promise::Resolve<T>> : std::true_type {};
 
+/**
+ * @brief Check if a type is a resolver.
+ *
+ * @tparam T Type to check.
+ */
 template <class T>
 static constexpr bool IS_RESOLVER = IsResolver<std::remove_cvref_t<T>>::value;
 
+/**
+ * @brief Check if a type is a rejector.
+ *
+ * @tparam T Type to check.
+ */
 template <class T>
 static constexpr bool IS_REJECTOR = std::is_same_v<std::remove_cvref_t<T>, promise::Reject>;
 
@@ -99,6 +128,11 @@ struct WithResolver : std::false_type {};
 template <class T>
 struct WithResolver<details::IPromise<T, true>> : std::true_type {};
 
+/**
+ * @brief Check if a promise is resolver-style.
+ *
+ * @tparam FUN Callable type.
+ */
 template <class FUN>
 static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
 
@@ -108,6 +142,11 @@ struct IsPromise : std::false_type {};
 template <class T, bool WITH_RESOLVER>
 struct IsPromise<details::IPromise<T, WITH_RESOLVER>> : std::true_type {};
 
+/**
+ * @brief Check if a type is a promise.
+ *
+ * @tparam FUN Type to check.
+ */
 template <class FUN>
 static constexpr bool IS_PROMISE = IsPromise<return_t<FUN>>::value;
 
@@ -155,6 +194,11 @@ struct args_<std::function<T()>> {
    using type = std::tuple<>;
 };
 
+/**
+ * @brief Get the argument types of a callable, excluding resolver/rejector if present.
+ *
+ * @tparam FUN Callable type.
+ */
 template <class FUN>
 using args_t = typename args_<std::remove_cvref_t<FUN>>::type;
 
@@ -172,6 +216,11 @@ struct all_args_<std::function<T(ARGS...)>> {
    using type = std::tuple<ARGS...>;
 };
 
+/**
+ * @brief Get all argument types of a callable, including resolver/rejector if present.
+ *
+ * @tparam FUN Callable type.
+ */
 template <class FUN>
 using all_args_t = typename all_args_<std::remove_cvref_t<FUN>>::type;
 

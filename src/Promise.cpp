@@ -25,6 +25,7 @@ SOFTWARE.
 #include "details/Promise.inl"
 
 namespace promise {
+
 #ifdef PROMISE_MEMCHECK
 std::atomic<std::size_t> Refcount::counter{0};
 #   ifdef PROMISE_MEMCHECK_FULL

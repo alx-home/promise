@@ -35,14 +35,27 @@ SOFTWARE.
 namespace promise {
 
 #ifdef PROMISE_MEMCHECK
+/**
+ * @brief Helper for memory leak detection in debug mode.
+ *
+ * When enabled, this class tracks the number of active promises and reports leaks on program exit.
+ */
 struct Refcount {
    static std::atomic<std::size_t> counter;
 #   ifdef PROMISE_MEMCHECK_FULL
+   /**
+    * @brief Set of active promise pointers for detailed leak reporting.
+    */
    static std::unordered_set<VPromise const*> ptrs;
    static std::mutex                          mutex;
    VPromise*                                  ptr_;
 #   endif
 
+   /**
+    * @brief Construct a Refcount for a promise pointer.
+    *
+    * @param ptr Pointer to the promise being tracked.
+    */
    explicit Refcount(VPromise* ptr) {
       ++counter;
 #   ifdef PROMISE_MEMCHECK_FULL
@@ -57,6 +70,9 @@ struct Refcount {
    Refcount& operator=(Refcount&&) noexcept      = delete;
    Refcount& operator=(Refcount const&) noexcept = delete;
 
+   /**
+    * @brief Destructor that decrements the counter and removes the pointer from tracking.
+    */
    ~Refcount() {
       --counter;
 #   ifdef PROMISE_MEMCHECK_FULL
@@ -68,6 +84,16 @@ struct Refcount {
 #endif  // PROMISE_MEMCHECK
 
 #ifdef PROMISE_MEMCHECK
+/**
+ * @brief Helper for memory leak detection in debug mode.
+ * When enabled, this function returns a scope guard that checks for active promises on destruction.
+ * If any active promises are detected, it reports the number of leaks and their addresses.
+ *
+ * @note This should be used at the beginning of the main function to ensure it runs for the entire
+ * program duration.
+ *
+ * @return Scope guard that checks for memory leaks on destruction.
+ */
 constexpr auto
 Memcheck() {
    struct Check {

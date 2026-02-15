@@ -44,11 +44,14 @@ struct Exception : std::runtime_error {
 
 /**
  * @brief Await all promises and return a combined result.
+ *
  * @param promise Promises to await.
+ *
  * @return Tuple of resolved values (std::nullopt_t for void).
  */
 template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
+
 namespace details {
 template <class T, bool WITH_RESOLVER>
 class Promise;

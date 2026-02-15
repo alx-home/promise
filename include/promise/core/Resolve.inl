@@ -44,17 +44,21 @@ template <>
 struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
    /**
     * @brief Construct a void resolver from an implementation callback.
+    *
     * @param impl Callback invoked on resolve.
     */
    Resolve(std::function<void()> impl);
 
    /**
     * @brief Resolve the promise.
+    *
     * @return True if this call resolved the promise, false if it was already resolved.
     */
    bool operator()() const;
+
    /**
     * @brief Check whether this resolver can still resolve.
+    *
     * @return True if already resolved, false otherwise.
     */
    operator bool() const;
@@ -72,18 +76,23 @@ template <class T>
 struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
    /**
     * @brief Construct a value resolver from an implementation callback.
+    *
     * @param impl Callback invoked on resolve.
     */
    Resolve(std::function<void(T const&)> impl);
 
    /**
     * @brief Resolve the promise with a value.
+    *
     * @param value Value to resolve with.
+    *
     * @return True if this call resolved the promise, false if it was already resolved.
     */
    bool operator()(T const& value) const;
+
    /**
     * @brief Check whether this resolver can still resolve.
+    *
     * @return True if already resolved, false otherwise.
     */
    operator bool() const;
