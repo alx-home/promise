@@ -28,7 +28,6 @@ SOFTWARE.
 
 #include "Handle.inl"
 #include "Memcheck.inl"
-#include "ExceptionWrapper.inl"
 
 #include <utils/Scoped.h>
 #include <algorithm>
@@ -473,7 +472,7 @@ private:
         [func =
            std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> Return {
            using exception_t = std::remove_cvref_t<Exception>;
-           ExceptionWrapper<exception_t> exc{};
+           std::exception_ptr exc{};
 
            try {
               if constexpr (std::is_void_v<T>) {
@@ -486,7 +485,7 @@ private:
               } else {
                  co_return co_await self;
               }
-           } catch (std::remove_cvref_t<Exception> const& e) {
+           } catch (exception_t const&) {
               exc = std::current_exception();
            } catch (...) {
               if constexpr (IS_EXC_PTR) {
@@ -498,11 +497,25 @@ private:
 
            assert(exc);
 
+           auto exception_wrapper = [&](auto&& invoke) -> decltype(auto) {
+              if constexpr (IS_EXC_PTR) {
+                 return invoke(exc);
+              } else {
+                 try {
+                    std::rethrow_exception(exc);
+                 } catch (exception_t const& e) {
+                    return invoke(e);
+                 }
+              }
+           };
+
            if constexpr (std::is_void_v<T2>) {
               if constexpr (IS_PROMISE<FUN>) {
-                 co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+                 co_await exception_wrapper([&](auto const& ex) {
+                    return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
+                 });
               } else {
-                 func(exc, std::forward<ARGS>(args)...);
+                 exception_wrapper([&](auto const& ex) { func(ex, std::forward<ARGS>(args)...); });
               }
 
               if constexpr (std::is_void_v<T>) {
@@ -512,9 +525,13 @@ private:
               }
            } else {
               if constexpr (IS_PROMISE<FUN>) {
-                 co_return co_await MakePromise(std::move(func), exc, std::forward<ARGS>(args)...);
+                 co_return co_await exception_wrapper([&](auto const& ex) {
+                    return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
+                 });
               } else {
-                 co_return func(exc, std::forward<ARGS>(args)...);
+                 co_return exception_wrapper([&](auto const& ex) {
+                    return func(ex, std::forward<ARGS>(args)...);
+                 });
               }
            }
         },

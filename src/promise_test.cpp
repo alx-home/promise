@@ -37,7 +37,9 @@ SOFTWARE.
 
 WPromise<void>
 Test() {
-   return MakePromise([]() -> Promise<void> { throw std::runtime_error("TEST_EXCEPTION"); });
+   return MakePromise([]() -> Promise<void> {
+      throw std::runtime_error("TEST_EXCEPTION");
+   });
 }
 
 #ifdef _WIN32
@@ -59,8 +61,15 @@ main() {
       freopen_s(&old, "CONOUT$", "w", stderr);
    }
 #endif  // DEBUG
+
    {
       auto main_prom{MakePromise([]() -> Promise<void> {
+         try {
+            co_await Test();
+         } catch (std::exception const& e) {
+            std::cout << "TEST " << e.what() << std::endl;
+         }
+
          try {
             Resolve<int> const* resolver{};
             Reject const*       rejecter{};
@@ -218,12 +227,6 @@ main() {
             [[maybe_unused]] auto result = (*resolver)(5);
             assert(result);
             co_await promall;
-
-            try {
-               co_await Test();
-            } catch (std::exception const& e) {
-               std::cout << "exc2? " << e.what() << std::endl;
-            }
 
             try {
                co_await MakePromise([&]() -> WPromise<void> { return Test(); });

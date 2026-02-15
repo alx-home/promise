@@ -31,7 +31,7 @@ win32_executable(TARGET_NAME promise_test
     FILES
   src/promise_test.cpp
 )
-target_link_libraries(promise_test alx-home::promise)
+target_link_libraries(promise_test PRIVATE alx-home::promise)
 target_include_directories(promise_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include/promise
 )
