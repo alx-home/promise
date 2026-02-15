@@ -1,0 +1,182 @@
+# C++20: How to safely catch and access exceptions thrown by coroutines with co_await?
+
+## Problem
+
+I'm experiencing a segmentation fault when trying to access exception details (`e.what()`) in a catch block after `co_await`ing a coroutine that throws an exception. The exception is successfully caught, but accessing any of its methods causes a crash.
+
+**Important:** This issue only manifests when using a `for` loop. If I remove the loop and just have a single `try { co_await task2; } catch (...)` block, the program works fine.
+
+## Minimal Reproducible Example
+
+```cpp
+#include <Windows.h>
+#include <coroutine>
+#include <exception>
+#include <iostream>
+#include <stdexcept>
+
+struct Task2 {
+   struct promise_type {
+      std::exception_ptr* exception_;
+
+      auto get_return_object() {
+         return Task2{std::coroutine_handle<promise_type>::from_promise(*this)};
+      }
+      std::suspend_never  initial_suspend() { return {}; }
+      std::suspend_always final_suspend() noexcept {
+         return {};
+      }  // Intentional: trying to keep frame alive
+      void return_void() {}
+      void unhandled_exception() { *exception_ = std::current_exception(); }
+   };
+
+   Task2(std::coroutine_handle<promise_type> h)
+      : handle_(h) {
+      h.promise().exception_ = &exception_;
+   }
+
+   ~Task2() {
+      std::cout << "Task2 destroyed" << std::endl;
+      if (handle_) {
+         handle_.destroy();
+      }
+   }
+
+   std::coroutine_handle<promise_type> handle_;
+   std::exception_ptr                  exception_;
+
+   bool await_ready() { return true; }
+   void await_suspend(std::coroutine_handle<>) {}
+   void await_resume() {
+      if (exception_) {
+         std::rethrow_exception(exception_);
+      }
+   }
+};
+
+struct Task1 {
+   struct promise_type {
+      auto get_return_object() {
+         return Task1{std::coroutine_handle<promise_type>::from_promise(*this)};
+      }
+      std::suspend_never  initial_suspend() { return {}; }
+      std::suspend_always final_suspend() noexcept { return {}; }
+      void                return_void() {}
+      void                unhandled_exception() {}
+   };
+
+   Task1(std::coroutine_handle<promise_type> h)
+      : handle_(h) {}
+
+   ~Task1() {
+      std::cout << "Task1 destroyed" << std::endl;
+      if (handle_) {
+         handle_.destroy();
+      }
+   }
+
+   std::coroutine_handle<promise_type> handle_;
+
+   bool await_ready() { return true; }
+   void await_suspend(std::coroutine_handle<>) {}
+   void await_resume() {}
+};
+
+Task2
+FThrow() {
+   throw std::runtime_error("TEST_EXCEPTION");
+   co_return;
+}
+
+Task1
+Fmain() {
+   for (int i = 0; i < 10; ++i) {  // Issue only happens IN A LOOP
+      std::cout << "Main promise iteration " << i << std::endl;
+      auto task2 = FThrow();
+      try {
+         co_await task2;
+      } catch (std::exception const& e) {
+         std::cout << "TEST " << e.what() << std::endl;  // SEGFAULT HERE
+      }
+   }
+   co_return;
+}
+
+int WINAPI
+WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/, LPSTR /*lpCmdLine*/, int /*nCmdShow*/) {
+   auto task = Fmain();
+   return 0;
+}
+```
+
+## Expected Behavior
+
+The program should print:
+```
+Main promise iteration 0
+TEST TEST_EXCEPTION
+Task2 destroyed
+Main promise iteration 1
+...
+```
+(with Task1/Task2 destructors called at the end of the loop/program)
+
+## Actual Behavior
+
+The program prints:
+```
+Main promise iteration 0
+TEST 
+```
+Then crashes with a segmentation fault when calling `e.what()`.
+
+**Critically, the destructors are NOT called before the crash** - neither "Task2 destroyed" nor "Task1 destroyed" appears in the output. This means the Task2 object (and its stored coroutine handle) still exists when the segfault occurs.
+
+WinDbg with page heap enabled shows the crash occurs at `0xCDCDCDCD` (uninitialized memory pattern), indicating the exception object has been freed.
+
+## Investigation
+
+1. The exception object is captured via `std::current_exception()` and stored in `std::exception_ptr`
+2. The exception is successfully rethrown in `await_resume()` and caught
+3. However, with MSVC, exception objects captured by `std::exception_ptr` are allocated in the coroutine frame
+4. I intentionally use `suspend_always` in `final_suspend()` and manually `destroy()` the handle in the destructor to try to keep the frame alive until after the catch handler completes
+5. **The destructors do NOT print before the crash**, meaning the Task2 object still exists when the segfault occurs, yet the exception object is already freed
+6. The issue only appears when using a loop - a single try/catch works fine
+7. **Debugging observation:** When breaking at line 41 (`std::rethrow_exception(exception_);`), the `exception_` variable in the debugger appears valid, and examining its address in the debug view shows it looks correct even after the segfault occurs. This suggests the `std::exception_ptr` itself is fine, but the exception object it points to has been deallocated.
+
+## Hypothesis
+
+My suspicion is that the **coroutine frame of `FThrow()` (where the exception object lives) is being destroyed between when `await_resume()` rethrows the exception and when the catch handler accesses `e.what()`**. 
+
+The sequence appears to be:
+1. `FThrow()` throws exception → caught in `unhandled_exception()` → stored as `std::exception_ptr`
+2. `await_resume()` calls `std::rethrow_exception(exception_)` → exception propagates
+3. **Coroutine frame is destroyed here** - even though the Task2 object (which holds the handle) still exists
+4. Exception is caught in the catch block, but the actual exception object no longer exists
+5. Calling `e.what()` dereferences freed memory → segfault
+6. Only then would the Task2 destructor eventually run (but we crash first)
+
+**This is the critical mystery:** The Task2 destructor doesn't run before the crash (no output), meaning the Task2 object still exists and should be holding the coroutine handle with `suspend_always` in `final_suspend()`. Yet somehow the frame is already destroyed.
+
+Possible explanations:
+- `await_ready()` returning `true` means the coroutine never actually suspends, making `suspend_always` in `final_suspend()` meaningless
+- The frame is destroyed immediately after the exception is thrown, regardless of suspension settings
+- The `std::exception_ptr` doesn't actually keep the exception object alive, only points to it
+
+## Environment
+
+- Clang-CL (LLVM/Clang compiler with MSVC compatibility layer) [tested across multiple versions]
+- MSVC standard library version 19.42 (Visual Studio 2022)
+- C++20 (`/std:c++20`)
+- Windows 11
+- Debug build with page heap enabled
+
+## Question
+
+**How can I safely catch and access exceptions thrown by coroutines after `co_await` without encountering use-after-free?** Is there a way to ensure the coroutine frame (and thus the exception object) remains valid until the catch handler completes, or is this a fundamental limitation of C++20 coroutines that requires a different error-handling pattern?
+
+Specifically:
+- Is my hypothesis about the frame destruction timing correct?
+- Does `await_ready()` returning `true` bypass the suspension mechanism and cause immediate frame destruction?
+- Is there a proper way to keep the frame alive until after exception handling completes?
+- Could this be caused by a compiler optimization bug?

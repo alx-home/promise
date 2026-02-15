@@ -917,7 +917,11 @@ public:
          details->resolver_ = std::move(resolver);
          details->function_ = std::move(holder);
 
-         details->handle_();
+         try {
+            details->handle_();
+         } catch (...) {
+            details->resolver_->Reject(std::current_exception());
+         }
       }
 
       if constexpr (RPROMISE) {

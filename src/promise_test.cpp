@@ -63,10 +63,12 @@ main() {
 
    {
       auto main_prom{MakePromise([]() -> Promise<void> {
-         try {
-            co_await Test();
-         } catch (std::exception const& e) {
-            std::cout << "TEST " << e.what() << std::endl;
+         for (int i = 0; i < 10; ++i) {
+            try {
+               co_await Test();
+            } catch (std::exception const& e) {
+               std::cout << "TEST " << e.what() << std::endl;
+            }
          }
 
          try {
