@@ -104,7 +104,7 @@ public:
     *
     * @return True if resolved or rejected.
     */
-   bool Done() const noexcept(false) {
+   bool Done() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -122,7 +122,7 @@ public:
     *
     * @warning Undefined if called before resolution.
     */
-   auto Value() const noexcept(false) {
+   auto Value() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -140,7 +140,7 @@ public:
     *
     * @return Stored exception pointer.
     */
-   std::exception_ptr Exception() const noexcept(false) {
+   std::exception_ptr Exception() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);

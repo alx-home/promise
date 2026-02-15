@@ -50,6 +50,37 @@ struct Reject : std::enable_shared_from_this<Reject> {
     * @return True if this call rejected the promise, false if it was already rejected.
     */
    bool operator()(std::exception_ptr exception) const;
+
+   /**
+    * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
+    *
+    * @tparam EXCEPTION Exception type to construct.
+    * @tparam ARGS Constructor arguments for the exception.
+    *
+    * @param args Arguments forwarded to the exception constructor.
+    *
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
+   template <class EXCEPTION>
+   bool operator()(EXCEPTION&& exception) const {
+      return (*this)(std::make_exception_ptr(std::forward<EXCEPTION>(exception)));
+   }
+
+   /**
+    * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
+    *
+    * @tparam EXCEPTION Exception type to construct.
+    * @tparam ARGS Constructor arguments for the exception.
+    *
+    * @param args Arguments forwarded to the exception constructor.
+    *
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
+   template <class EXCEPTION, class... ARGS>
+   bool Apply(ARGS&&... args) const {
+      return (*this)(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
+   }
+
    /**
     * @brief Check whether this rejector can still reject.
     *

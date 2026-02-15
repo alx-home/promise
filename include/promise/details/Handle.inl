@@ -258,6 +258,7 @@ public:
     */
    template <class SELF>
    bool IsDone(this SELF&& self, Lock lock) {
+      assert(self.resolver_);
       return self.ValuePromise::IsResolved(lock) || self.resolver_->exception_;
    }
 

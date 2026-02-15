@@ -65,7 +65,7 @@ MakePromise(FUN&& func, ARGS&&... args) {
 template <class EXCEPTION, bool RELAXED, class... ARGS>
 bool
 MakeReject(promise::Reject const& reject, ARGS&&... args) {
-   if (!reject(std::make_exception_ptr(EXCEPTION{std::forward<ARGS>(args)...}))) {
+   if (!reject.Apply<EXCEPTION>(std::forward<ARGS>(args)...)) {
       if constexpr (!RELAXED) {
          throw promise::Exception("Promise Already rejected !");
       }
@@ -73,17 +73,6 @@ MakeReject(promise::Reject const& reject, ARGS&&... args) {
    }
 
    return true;
-}
-
-/**
- * @brief Create a rejected promise by constructing an exception.
- * @param args Constructor args for EXCEPTION.
- * @return Rejected promise instance.
- */
-template <class PROMISE, class EXCEPTION, class... ARGS>
-auto
-MakeReject(ARGS&&... args) {
-   return PROMISE::Reject(std::make_exception_ptr(EXCEPTION{std::forward<ARGS>(args)...}));
 }
 
 namespace promise {

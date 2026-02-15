@@ -151,6 +151,19 @@ struct Resolver {
     * @param resolved Shared resolved flag.
     * @return True if this call rejected the promise, false if it was already rejected.
     */
+   template <class EXCEPTION, class... ARGS>
+   bool Reject(ARGS&&... args) {
+      return Reject(
+        std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)), *this->resolved_
+      );
+   }
+
+   /**
+    * @brief Reject the promise with an exception and a shared resolved flag.
+    * @param exception Exception to store.
+    * @param resolved Shared resolved flag.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
    bool Reject(std::exception_ptr exception, std::atomic<bool>& resolved) {
       if (!resolved.exchange(true)) {
          std::unique_lock lock{promise_->mutex_};
