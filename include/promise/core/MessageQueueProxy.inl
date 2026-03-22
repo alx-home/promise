@@ -29,11 +29,11 @@ SOFTWARE.
 #include <utils/MessageQueueProxy.inl>
 
 namespace utils::queue {
-template <class OBJECT>
+template <class OBJECT, class OBJECT_PUBLIC>
 template <class T>
    requires(!std::is_void_v<T>)
 WPromise<T>
-Proxy<OBJECT>::operator()(std::function<T(OBJECT&)>&& callback) {
+Proxy<OBJECT, OBJECT_PUBLIC>::operator()(std::function<T(OBJECT_PUBLIC&)>&& callback) {
    return MakePromise(
      [this, callback = std::move(callback)](
        Resolve<T> const& resolve, Reject const& reject
