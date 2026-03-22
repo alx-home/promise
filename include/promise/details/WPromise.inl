@@ -231,7 +231,7 @@ public:
     */
    Finally(this SELF&& self, FUN&& func) {
       return std::visit(
-        [&](auto const& details) constexpr {
+        [&](auto&& details) constexpr {
            assert(details);
 
            if constexpr (std::is_lvalue_reference_v<SELF>) {

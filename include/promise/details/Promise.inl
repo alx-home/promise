@@ -736,9 +736,9 @@ private:
       } else {
          return ::MakePromise(
            [func = std::forward<FUN>(func)](
-             promise::Resolve<T> const&           resolve,
-             promise::Reject const&               reject,
-             details::IPromise<T, WITH_RESOLVER>& self
+             promise::Resolve<T> const& resolve,
+             promise::Reject const&     reject,
+             Promise<T, WITH_RESOLVER>& self
            ) -> details::IPromise<T, true> {
               std::exception_ptr exception;
 
