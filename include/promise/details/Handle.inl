@@ -263,6 +263,32 @@ public:
    }
 
    /**
+    * @brief Check if rejected using an existing lock.
+    *
+    * @param lock Active lock for thread-safe access.
+    *
+    * @return True if rejected.
+    */
+   template <class SELF>
+   bool IsRejected(this SELF&& self, Lock) {
+      assert(self.resolver_);
+      return self.resolver_->exception_;
+   }
+
+   /**
+    * @brief Check if rejected using an existing lock.
+    *
+    * @param lock Active lock for thread-safe access.
+    *
+    * @return True if rejected.
+    */
+   template <class SELF>
+   bool IsRejected(this SELF&& self) {
+      std::shared_lock lock{self.mutex_};
+      return self.IsRejected(lock);
+   }
+
+   /**
     * @brief Check if done.
     *
     * @return True if resolved or rejected.

@@ -116,6 +116,38 @@ public:
    }
 
    /**
+    * @brief Check if the promise is rejected.
+    *
+    * @return True if rejected.
+    */
+   bool Rejected() const noexcept {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+           return details->IsRejected(lock);
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Check if the promise is resolved.
+    *
+    * @return True if resolved.
+    */
+   bool Resolved() const noexcept {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+           return details->IsResolved(lock);
+        },
+        details_
+      );
+   }
+
+   /**
     * @brief Get the resolved value (valid only when done and resolved).
     *
     * @return Resolved value.
