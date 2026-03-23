@@ -142,6 +142,15 @@ struct IsPromise : std::false_type {};
 template <class T, bool WITH_RESOLVER>
 struct IsPromise<details::IPromise<T, WITH_RESOLVER>> : std::true_type {};
 
+template <class T>
+struct IsPromise<details::WPromise<T>> : std::true_type {};
+
+template <class FUN>
+struct IsWPromise : std::false_type {};
+
+template <class T>
+struct IsWPromise<details::WPromise<T>> : std::true_type {};
+
 /**
  * @brief Check if a type is a promise.
  *
@@ -149,6 +158,14 @@ struct IsPromise<details::IPromise<T, WITH_RESOLVER>> : std::true_type {};
  */
 template <class FUN>
 static constexpr bool IS_PROMISE = IsPromise<return_t<FUN>>::value;
+
+/**
+ * @brief Check if a type is a promise wrapper.
+ *
+ * @tparam FUN Type to check.
+ */
+template <class FUN>
+static constexpr bool IS_WPROMISE = IsWPromise<std::remove_cvref_t<FUN>>::value;
 
 template <class FUN>
 struct args_;
