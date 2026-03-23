@@ -38,7 +38,7 @@ Proxy<OBJECT, OBJECT_PUBLIC>::operator()(std::function<T(OBJECT_PUBLIC&)>&& call
      [this, callback = std::move(callback)](
        Resolve<T> const& resolve, Reject const& reject
      ) mutable -> Promise<T, true> {
-        if (details_.MessageQueue::Dispatch(
+        if (details_.MessageQueue::Ensure(
               [this, callback = std::move(callback), &resolve, &reject] constexpr mutable {
                  try {
                     resolve(callback(details_));
