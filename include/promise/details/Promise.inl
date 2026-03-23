@@ -853,6 +853,33 @@ public:
    }
 
    /**
+    * @brief Create a rejected promise without starting a coroutine.
+    *
+    * @tparam EXCEPTION Type of the exception to reject with.
+    * @tparam ARGS Types of arguments to forward to the resolver.
+    *
+    * @param args Constructor args for the rejection value (if any).
+    *
+    * @return Rejected promise.
+    */
+   template <class EXCEPTION, class... ARGS>
+   static constexpr auto Reject(ARGS&&... args) {
+      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
+      auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+
+      using Promise = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
+
+      assert(std::holds_alternative<Promise>(promise.details_));
+      auto const details = std::get<Promise>(promise.details_).get();
+      resolver->promise_ = details;
+      details->resolver_ = std::move(resolver);
+
+      details->resolver_->Reject(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
+
+      return WPromise<T>{std::move(promise)};
+   }
+
+   /**
     * @brief Create a promise from a callable and optional resolver.
     **
     * @tparam RPROMISE Boolean flag indicating whether to return a tuple with resolver and rejector.

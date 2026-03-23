@@ -274,6 +274,20 @@ public:
       return Promise::Reject(std::forward<ARGS>(args)...);
    }
 
+   template <class EXCEPTION, class... ARGS>
+   /**
+    * @brief Create a rejected promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the rejection value constructor.
+    *
+    * @param args Constructor args for the rejection value (if any).
+    *
+    * @return Rejected promise.
+    */
+   static constexpr auto Reject(ARGS&&... args) {
+      return Promise::template Reject<EXCEPTION>(std::forward<ARGS>(args)...);
+   }
+
    /**
     * @brief Detach so the promise can live independently of this handle.
     *
