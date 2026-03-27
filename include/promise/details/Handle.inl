@@ -259,7 +259,7 @@ public:
    template <class SELF>
    bool IsDone(this SELF&& self, Lock lock) {
       assert(self.resolver_);
-      return self.ValuePromise::IsResolved(lock) || self.resolver_->exception_;
+      return self.ValuePromise::IsResolved(lock) || (self.resolver_->exception_ != nullptr);
    }
 
    /**
@@ -272,7 +272,7 @@ public:
    template <class SELF>
    bool IsRejected(this SELF&& self, Lock) {
       assert(self.resolver_);
-      return self.resolver_->exception_;
+      return (self.resolver_->exception_ != nullptr);
    }
 
    /**
