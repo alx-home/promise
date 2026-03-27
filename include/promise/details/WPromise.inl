@@ -26,7 +26,9 @@ SOFTWARE.
 
 #include "Promise.inl"
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <variant>
 
@@ -52,6 +54,38 @@ public:
    using RPromise = promise::details::Promise<T, true>;
 
    using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
+
+   WPromise(WPromise&& other) noexcept
+      : details_(std::move(other.details_)) {
+      std::visit([](auto& details) constexpr { details.reset(); }, other.details_);
+   }
+   WPromise& operator=(WPromise&& other) noexcept {
+      if (this != &other) {
+         details_ = std::move(other.details_);
+         std::visit([](auto& details) constexpr { details.reset(); }, other.details_);
+      }
+      return *this;
+   }
+
+   WPromise(WPromise const& other)            = default;
+   WPromise& operator=(WPromise const& other) = default;
+
+   ~WPromise() {
+      std::visit(
+        [](auto& details) constexpr {
+           if (details && !details->IsDone()) {
+              std::mutex              mutex;
+              std::unique_lock        lock{mutex};
+              std::condition_variable cv{};
+
+              // Promise must not be detached to avoid infinite loop
+              auto promise = details->Finally([&]() constexpr { cv.notify_all(); });
+              cv.wait(lock, [&details]() constexpr { return details->IsDone(); });
+           }
+        },
+        details_
+      );
+   }
 
    /**
     * @brief Check if the promise can resume immediately.
