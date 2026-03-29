@@ -29,6 +29,7 @@ SOFTWARE.
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <variant>
 
@@ -55,20 +56,10 @@ public:
 
    using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
 
-   WPromise(WPromise&& other) noexcept
-      : details_(std::move(other.details_)) {
-      std::visit([](auto& details) constexpr { details.reset(); }, other.details_);
-   }
-   WPromise& operator=(WPromise&& other) noexcept {
-      if (this != &other) {
-         details_ = std::move(other.details_);
-         std::visit([](auto& details) constexpr { details.reset(); }, other.details_);
-      }
-      return *this;
-   }
-
-   WPromise(WPromise const& other)            = default;
-   WPromise& operator=(WPromise const& other) = default;
+   WPromise(WPromise const& other)                = default;
+   WPromise& operator=(WPromise const& other)     = default;
+   WPromise(WPromise&& other) noexcept            = default;
+   WPromise& operator=(WPromise&& other) noexcept = default;
 
    ~WPromise() {
       std::visit(
@@ -389,7 +380,7 @@ public:
    }
 
 private:
-   Details details_{std::shared_ptr<Promise>{nullptr}};
+   Details details_{};
 
    /**
     * @brief Type-erased awaitable for VPromise.

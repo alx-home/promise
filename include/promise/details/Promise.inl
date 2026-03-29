@@ -126,7 +126,7 @@ public:
     * Ensures that the coroutine handle is properly cleaned up and that any unresolved promises are
     * detected in debug mode.
     */
-   ~Promise() {
+   ~Promise() override {
       if (this->handle_) {
          assert(this->self_owned_);
       }
@@ -137,7 +137,7 @@ public:
    Promise(Promise&& rhs) noexcept            = delete;
    Promise& operator=(Promise&& rhs) noexcept = delete;
    Promise(Promise const&)                    = delete;
-   Promise operator=(Promise const&)          = delete;
+   Promise& operator=(Promise const&)         = delete;
 
    /**
     * @brief Check if the promise can resume immediately.
@@ -241,6 +241,11 @@ private:
 #endif
             self_(self) {
          }
+
+         Awaitable(Awaitable&&) noexcept            = default;
+         Awaitable& operator=(Awaitable&&) noexcept = default;
+         Awaitable(Awaitable const&)                = delete;
+         Awaitable& operator=(Awaitable const&)     = delete;
 
          /**
           * @brief Check if the await can complete synchronously.

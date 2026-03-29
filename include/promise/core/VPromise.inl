@@ -34,11 +34,23 @@ namespace promise {
  * @brief Type-erased promise interface, useful for storing promises in pointers.
  */
 struct VPromise {
+   VPromise()                               = default;
+   VPromise(VPromise const&)                = default;
+   VPromise(VPromise&&) noexcept            = default;
+   VPromise& operator=(VPromise const&)     = default;
+   VPromise& operator=(VPromise&&) noexcept = default;
+
+   virtual ~VPromise() = default;
+
    struct Awaitable {
-      /**
-       * @brief Virtual destructor.
-       */
+      Awaitable()          = default;
       virtual ~Awaitable() = default;
+
+      Awaitable(Awaitable const&)                = default;
+      Awaitable& operator=(Awaitable const&)     = default;
+      Awaitable(Awaitable&&) noexcept            = default;
+      Awaitable& operator=(Awaitable&&) noexcept = default;
+
       /**
        * @brief Check if the await can complete synchronously.
        *
@@ -61,11 +73,6 @@ struct VPromise {
     * @brief Detach the promise from this handle.
     */
    virtual void VDetach() && = 0;
-
-   /**
-    * @brief Virtual destructor.
-    */
-   virtual ~VPromise() = default;
 
    /**
     * @brief Access a type-erased awaitable.
