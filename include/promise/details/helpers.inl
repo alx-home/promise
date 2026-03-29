@@ -37,6 +37,7 @@ SOFTWARE.
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 /**
  * @brief Build a Promise from a generic callable.
@@ -81,7 +82,7 @@ namespace promise {
  *
  * @param promise Promises to await.
  *
- * @return Tuple of resolved values (std::nullopt_t for void).
+ * @return Tuple of resolved values (std::monostate for void).
  */
 template <class... PROMISE>
 static constexpr auto
@@ -89,17 +90,85 @@ All(PROMISE&&... promise) {
    return MakePromise(
      [promise...]() mutable -> details::IPromise<std::tuple<std::conditional_t<
                               std::is_void_v<return_t<PROMISE>>,
-                              std::nullopt_t,
+                              std::monostate,
                               return_t<PROMISE>>...>> {
         co_return std::make_tuple(([]<class... RESULT>(RESULT... result) constexpr {
            if constexpr (sizeof...(RESULT)) {
               return result...[0];
            } else {
-              return std::nullopt;
+              return std::monostate{};
            }
         }(co_await promise))...);
      }
    );
+}
+
+template <class V, class... TS>
+struct UniqueVariantHelper;
+
+template <class V, class T, class... TS>
+struct UniqueVariantHelper<V, T, TS...> {
+   template <typename T2, typename V2>
+   struct add_if_missing;
+
+   template <typename T2, typename... US>
+   struct add_if_missing<T2, std::variant<US...>> {
+      using type = std::conditional_t<
+        (std::is_same_v<T2, US> || ...),
+        std::variant<US...>,
+        std::variant<US..., T2>>;
+   };
+
+   using type = typename UniqueVariantHelper<typename add_if_missing<T, V>::type, TS...>::type;
+};
+
+template <typename V>
+struct UniqueVariantHelper<V> {
+   using type = V;
+};
+
+template <typename... TS>
+using unique_variant = typename UniqueVariantHelper<std::variant<>, TS...>::type;
+
+/**
+ * @brief Await the first promise to resolve and return its result.
+ *
+ * @param promise Promises to await.
+ *
+ * @return Variant of resolved values (std::monostate for void).
+ */
+template <class... PROMISES>
+static constexpr auto
+Race(PROMISES&&... promise) {
+   auto [race_promise, resolve, reject] = Pure<unique_variant<
+     std::
+       conditional_t<std::is_void_v<return_t<PROMISES>>, std::monostate, return_t<PROMISES>>...>>();
+
+   auto wrapper = [resolve, reject]<class PROMISE>(PROMISE&& promise) constexpr {
+      using Return = return_t<PROMISE>;
+
+      // if constexpr (std::is_void_v<Return>) {
+      // // @todo bug compilo ?
+      //    std::forward<decltype(promise)>(promise)
+      //      .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(std::monostate{}); })
+      //      .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+      //         (*reject)(std::move(exception));
+      //      })
+      //      .Detach();
+      // } else {
+      std::forward<decltype(promise)>(promise)
+        .Then([resolve = std::move(resolve)](Return const& result) constexpr { (*resolve)(result); }
+        )
+        .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+           (*reject)(std::move(exception));
+        })
+        .Detach();
+      // }
+   };
+
+   (wrapper(std::forward<PROMISES>(promise)), ...);
+
+   return race_promise;
 }
 
 }  // namespace promise

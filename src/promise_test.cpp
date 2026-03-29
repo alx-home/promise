@@ -238,6 +238,79 @@ main() {
             co_await promall;
 
             std::cout << "prom_catch_asyn " << *(co_await prom_catch_asyn) << std::endl;
+            {
+               auto prom_race1 = MakePromise([]() -> Promise<double> {
+                  throw std::runtime_error("test race1");
+                  co_return 2;
+               });
+               auto prom_race2 = MakePromise([]() -> Promise<double> { co_return 2; });
+               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+
+               co_await promise::Race(prom_race1, prom_race2, prom_race3)
+                 .Catch([](std::runtime_error const& exception) {
+                    std::cout << "race1 exception: " << exception.what() << std::endl;
+                 })
+                 .Then([](std::optional<std::variant<double, int>> const& value) {
+                    if (value.has_value()) {
+                       if (std::holds_alternative<int>(*value)) {
+                          std::cout << "race1 int " << std::get<int>(*value) << std::endl;
+                       } else {
+                          std::cout << "race1 double " << std::get<double>(*value) << std::endl;
+                       }
+                    }
+                 });
+
+               co_await promise::All(prom_race1, prom_race2, prom_race3)
+                 .Catch([](std::runtime_error const& exception) {
+                    std::cout << "race1 all exception: " << exception.what() << std::endl;
+                 });
+            }
+
+            {
+               auto prom_race1 = MakePromise([]() -> Promise<int> { co_return 1; });
+               auto prom_race2 = MakePromise([]() -> Promise<double> { co_return 2; });
+               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+
+               co_await promise::Race(prom_race1, prom_race2, prom_race3)
+                 .Then([](std::variant<int, double> const& value) {
+                    if (std::holds_alternative<int>(value)) {
+                       std::cout << "race2 int " << std::get<int>(value) << std::endl;
+                    } else {
+                       std::cout << "race2 double " << std::get<double>(value) << std::endl;
+                    }
+                 });
+
+               co_await promise::All(prom_race1, prom_race2, prom_race3);
+            }
+            {
+               auto prom_race1 = MakePromise([]() -> Promise<int> { co_return 1; });
+               auto prom_race2 = MakePromise([]() -> Promise<double> {
+                  throw std::runtime_error("test race3");
+                  co_return 2;
+               });
+               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+
+               co_await promise::Race(prom_race1, prom_race2, prom_race3)
+                 .Catch([](std::runtime_error const& exception) {
+                    std::cout << "race3 exception: " << exception.what() << std::endl;
+                 })
+                 .Then([](std::optional<std::variant<int, double>> const& value) {
+                    if (value.has_value()) {
+                       if (std::holds_alternative<int>(*value)) {
+                          std::cout << "race3 int " << std::get<int>(*value) << std::endl;
+                       } else {
+                          std::cout << "race3 double " << std::get<double>(*value) << std::endl;
+                       }
+                    } else {
+                       std::cout << "race3 no value" << std::endl;
+                    }
+                 });
+
+               co_await promise::All(prom_race1, prom_race2, prom_race3)
+                 .Catch([](std::runtime_error const& exception) {
+                    std::cout << "race3 all exception: " << exception.what() << std::endl;
+                 });
+            }
 
             try {
                co_await MakePromise([&]() -> WPromise<void> { return Test(); });
