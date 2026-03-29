@@ -343,7 +343,7 @@ public:
       std::unique_lock lock{self->mutex_};
       assert(!self->self_owned_);
 
-      if (!ValuePromise::IsResolved(lock)) {
+      if (!IsDone(lock)) {
          auto& result       = *self;
          result.self_owned_ = std::move(self);
 

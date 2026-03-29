@@ -168,7 +168,7 @@ Race(PROMISES&&... promise) {
 
    (wrapper(std::forward<PROMISES>(promise)), ...);
 
-   return race_promise;
+   return std::move(race_promise);
 }
 
 }  // namespace promise

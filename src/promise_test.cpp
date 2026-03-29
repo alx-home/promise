@@ -323,6 +323,8 @@ main() {
 
          co_return;
       })};
+
+      assert(main_prom.Done());
    }
 
    return 0;
