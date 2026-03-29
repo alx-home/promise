@@ -627,7 +627,22 @@ private:
                try {
                   std::rethrow_exception(exception);
                } catch (Exception const& ex) {
-                  return invoke(ex);
+                  if constexpr (IS_PROMISE<FUN> && std::is_lvalue_reference_v<Exception>) {
+                     // Copy exception to avoid dangling reference if func captures it by
+                     // reference and is called after this scope
+                     using invoke_promise_t =
+                       std::invoke_result_t<decltype(invoke)&, Exception const&>;
+                     using invoke_value_t = return_t<invoke_promise_t>;
+
+                     return MakePromise(
+                       [ex, invoke = std::move(invoke)](
+                       ) mutable -> details::IPromise<invoke_value_t, false> {
+                          co_return co_await invoke(ex);
+                       }
+                     );
+                  } else {
+                     return invoke(ex);
+                  }
                }
             }
          };
@@ -637,15 +652,13 @@ private:
                                      std::forward<ARGS>(args)](auto const& ex) constexpr mutable {
             if constexpr (IS_PROMISE<FUN>) {
                return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
-            } else {
-               if constexpr (std::is_void_v<T2>) {
-                  func(ex, std::forward<ARGS>(args)...);
-                  if constexpr (!std::is_void_v<T>) {
-                     return std::optional<T>{};
-                  }
-               } else {
-                  return func(ex, std::forward<ARGS>(args)...);
+            } else if constexpr (std::is_void_v<T2>) {
+               func(ex, std::forward<ARGS>(args)...);
+               if constexpr (!std::is_void_v<T>) {
+                  return std::optional<T>{};
                }
+            } else {
+               return func(ex, std::forward<ARGS>(args)...);
             }
          });
       };
@@ -653,16 +666,17 @@ private:
       auto resolve_wrapper = [](auto&& promise, auto&& resolve) constexpr {
          if constexpr (std::is_void_v<T2>) {
             if constexpr (std::is_void_v<T>) {
-               return promise.Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); });
+               return std::move(promise).Then([resolve = std::move(resolve)]() constexpr {
+                  (*resolve)();
+               });
             } else {
-               return promise.Then([resolve = std::move(resolve)]() constexpr {
+               return std::move(promise).Then([resolve = std::move(resolve)]() constexpr {
                   (*resolve)(std::nullopt);
                });
             }
          } else {
-            return promise.Then([resolve = std::move(resolve)](T2 const& value) constexpr {
-               (*resolve)(value);
-            });
+            return std::move(promise).Then([resolve = std::move(resolve)](T2 const& value
+                                           ) constexpr { (*resolve)(value); });
          }
       };
 
@@ -680,7 +694,7 @@ private:
                     })
                     .Detach();
 
-                  return promise;
+                  return std::move(promise);
                } else {
                   if constexpr (std::is_void_v<std::invoke_result_t<
                                   decltype(apply_exception),
@@ -913,7 +927,7 @@ private:
          return std::move(promise);
       }
 
-      return promise;
+      return std::move(promise);
    }
 
    /**
