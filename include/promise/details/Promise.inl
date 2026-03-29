@@ -305,6 +305,20 @@ private:
    }
 
    /**
+    * @brief Register an awaiting function.
+    *
+    * @param fun Awaiting function.
+    * @param lock Active lock for thread-safe access.
+    *
+    * @return True if registered.
+    */
+   bool Await(std::function<void()> fun, Lock lock) {
+      (void)lock;
+      awaiters_.emplace_back(fun);
+      return true;
+   }
+
+   /**
     * @brief Check whether the promise is ready.
     *
     * @param lock Active lock for thread-safe access.
@@ -356,103 +370,166 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
-      {
-         // Optimisation skip coroutine frame creation
+      static_assert(!IS_WPROMISE<FUN>, "Then does not support promise wrapper!");
 
-         if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
-            if constexpr (!IS_PROMISE<FUN>) {
-               // Function return type
-               using T2 = return_t<FUN>;
+      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+         if constexpr (!IS_PROMISE<FUN>) {
+            // Function return type
+            using T2 = return_t<FUN>;
 
-               try {
-                  if constexpr (IS_VOID) {
-                     if constexpr (std::is_void_v<T2>) {
-                        func(std::forward<ARGS>(args)...);
-                        return details::WPromise<T2>::Resolve();
-                     } else {
-                        return details::WPromise<T2>::Resolve(func(std::forward<ARGS>(args)...));
-                     }
-                  } else {
-                     if constexpr (std::is_void_v<T2>) {
-                        func(this->GetValue(lock), std::forward<ARGS>(args)...);
-                        return details::WPromise<T2>::Resolve();
-                     } else {
-                        return details::WPromise<T2>::Resolve(
-                          func(this->GetValue(lock), std::forward<ARGS>(args)...)
-                        );
-                     }
-                  }
-               } catch (...) {
-                  return details::WPromise<T2>::Reject(std::current_exception());
-               }
-            } else if constexpr (IS_VOID) {
-               return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
-            } else {
-               return ::MakePromise(
-                 std::move(func), this->GetValue(lock), std::forward<ARGS>(args)...
-               );
+            auto const& exception = this->GetException(lock);
+            if (exception) {
+               lock.unlock();
+               return details::WPromise<T2>::Reject(exception);
             }
-         }
-      }  // else @todo
 
-      if constexpr (IS_PROMISE<FUN>) {
+            try {
+               if constexpr (IS_VOID) {
+                  lock.unlock();
+
+                  if constexpr (std::is_void_v<T2>) {
+                     func(std::forward<ARGS>(args)...);
+                     return details::WPromise<T2>::Resolve();
+                  } else {
+                     return details::WPromise<T2>::Resolve(func(std::forward<ARGS>(args)...));
+                  }
+               } else {
+                  auto const& value = this->GetValue(lock);
+                  lock.unlock();
+
+                  if constexpr (std::is_void_v<T2>) {
+                     func(value, std::forward<ARGS>(args)...);
+                     return details::WPromise<T2>::Resolve();
+                  } else {
+                     return details::WPromise<T2>::Resolve(func(value, std::forward<ARGS>(args)...)
+                     );
+                  }
+               }
+            } catch (...) {
+               return details::WPromise<T2>::Reject(std::current_exception());
+            }
+         } else if constexpr (IS_VOID) {
+            using T2 = return_t<return_t<FUN>>;
+
+            auto const& exception = this->GetException(lock);
+            if (exception) {
+               lock.unlock();
+               return details::WPromise<T2>::Reject(exception);
+            }
+
+            return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
+         } else {
+            using T2 = return_t<return_t<FUN>>;
+
+            auto const& exception = this->GetException(lock);
+            if (exception) {
+               lock.unlock();
+               return details::WPromise<T2>::Reject(exception);
+            }
+
+            auto const& value = this->GetValue(lock);
+            lock.unlock();
+
+            return ::MakePromise(std::move(func), value, std::forward<ARGS>(args)...);
+         }
+      } else if constexpr (IS_PROMISE<FUN>) {
          // Promise return type
          using T2 = return_t<return_t<FUN>>;
 
-         return ::MakePromise(
-           [func = std::forward<FUN>(func)](
-             details::Promise<T, WITH_RESOLVER>& self, ARGS&&... args
-           ) -> details::IPromise<T2, false> {
-              if constexpr (IS_VOID) {
-                 co_await self;
-                 co_return co_await ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
-              } else {
-                 co_return co_await ::MakePromise(
-                   std::move(func), co_await self, std::forward<ARGS>(args)...
-                 );
-              }
-           },
-           *this,
-           std::forward<ARGS>(args)...
-         );
-      } else {
-         // Function return type
-         using T2                        = return_t<FUN>;
          auto [promise, resolve, reject] = promise::Pure<T2>();
-
-         ::MakePromise(
-           [func = std::forward<FUN>(func), resolve, reject](
-             promise::details::Promise<T, WITH_RESOLVER>& self, ARGS&&... args
-           ) -> details::IPromise<std::conditional_t<IS_VOID, void, void>, false> {
-              // std::conditional_t<IS_VOID, void, void> is used to delay the return type deduction
-              // to avoid Promise<void> undefined type compilation error
-              try {
-                 if constexpr (IS_VOID) {
-                    co_await self;
-                    if constexpr (std::is_void_v<T2>) {
-                       func(std::forward<ARGS>(args)...);
-                       (*resolve)();
-                    } else {
-                       (*resolve)(func(std::forward<ARGS>(args)...));
-                    }
+         Await(
+           [this,
+            func     = std::forward<FUN>(func),
+            resolve  = std::move(resolve),
+            reject   = std::move(reject),
+            ... args = std::forward<ARGS>(args)] mutable {
+              auto promise = [this,
+                              func     = std::move(func),
+                              ... args = std::forward<ARGS>(args)] constexpr mutable {
+                 std::shared_lock lock{this->mutex_};
+                 auto const&      exception = this->GetException(lock);
+                 if (exception) {
+                    lock.unlock();
+                    return details::WPromise<T2>::Reject(exception);
                  } else {
-                    if constexpr (std::is_void_v<T2>) {
-                       func(co_await self, std::forward<ARGS>(args)...);
-                       (*resolve)();
+                    if constexpr (IS_VOID) {
+                       lock.unlock();
+                       return ::MakePromise(std::move(func), std::forward<ARGS>(args)...);
                     } else {
-                       (*resolve)(func(co_await self, std::forward<ARGS>(args)...));
+                       auto const& value = this->GetValue(lock);
+                       lock.unlock();
+                       return ::MakePromise(std::move(func), value, std::forward<ARGS>(args)...);
+                    }
+                 }
+              }();
+
+              [promise = std::move(promise), resolve = std::move(resolve)] constexpr mutable {
+                 if constexpr (std::is_void_v<T2>) {
+                    return std::move(promise).Then([resolve = std::move(resolve)]() constexpr {
+                       (*resolve)();
+                    });
+                 } else {
+                    return std::move(promise).Then([resolve = std::move(resolve)](T2 const& value
+                                                   ) constexpr { (*resolve)(value); });
+                 }
+              }()
+                .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+                   (*reject)(std::move(exception));
+                })
+                .Detach();
+           },
+           lock
+         );
+
+         return std::move(promise);
+      } else {
+         lock.unlock();
+
+         // Function return type
+         using T2 = return_t<FUN>;
+
+         auto [promise, resolve, reject] = promise::Pure<T2>();
+         Await(
+           [this,
+            func     = std::forward<FUN>(func),
+            resolve  = std::move(resolve),
+            reject   = std::move(reject),
+            ... args = std::forward<ARGS>(args)] constexpr {
+              try {
+                 std::shared_lock lock{this->mutex_};
+                 auto const&      exception = this->GetException(lock);
+
+                 if (exception) {
+                    lock.unlock();
+                    (*reject)(exception);
+                 } else {
+                    if constexpr (IS_VOID) {
+                       lock.unlock();
+
+                       if constexpr (std::is_void_v<T2>) {
+                          func(std::forward<ARGS>(args)...);
+                          (*resolve)();
+                       } else {
+                          (*resolve)(func(std::forward<ARGS>(args)...));
+                       }
+                    } else {
+                       auto const& value = this->GetValue(lock);
+                       lock.unlock();
+
+                       if constexpr (std::is_void_v<T2>) {
+                          func(value, std::forward<ARGS>(args)...);
+                          (*resolve)();
+                       } else {
+                          (*resolve)(func(value, std::forward<ARGS>(args)...));
+                       }
                     }
                  }
               } catch (...) {
                  (*reject)(std::current_exception());
               }
-
-              co_return;
            },
-           *this,
-           std::forward<ARGS>(args)...
-         )
-           .Detach();
+           lock
+         );
 
          return std::move(promise);
       }
@@ -491,6 +568,8 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Catch(FUN&& func, ARGS&&... args) & {
+      static_assert(!IS_WPROMISE<FUN>, "Catch does not support promise wrapper!");
+
       // Promise return type
       using promise_t = return_t<decltype(std::function{func})>;
       using T2        = std::remove_pointer_t<decltype([]() constexpr {
@@ -521,102 +600,167 @@ private:
          }
       }())>;
 
-      if (this->IsDone()) {
-         // Optimisation skip coroutine frame creation
+      using ReturnType = return_t<Return>;
 
-         if (std::shared_lock lock{this->mutex_}; !this->GetException(lock)) {
-            if constexpr (std::is_void_v<T>) {
-               if constexpr (std::is_void_v<T2>) {
-                  return WPromise<return_t<Return>>::Resolve();
-               } else {
-                  return WPromise<return_t<Return>>::Resolve(std::optional<T2>{});
-               }
-            } else {
-               return WPromise<return_t<Return>>::Resolve(this->GetValue(lock));
+      auto apply_value = [this](auto& lock) constexpr {
+         if constexpr (std::is_void_v<T>) {
+            (void)this;
+            lock.unlock();
+
+            if constexpr (!std::is_void_v<T2>) {
+               return std::optional<T2>{};
             }
-         }  // @todo else
-      }
+         } else {
+            auto const& value = this->GetValue(lock);
+            lock.unlock();
+            return value;
+         }
+      };
 
-      return MakePromise(
-        [func =
-           std::forward<FUN>(func)](Promise<T, WITH_RESOLVER>& self, ARGS&&... args) -> Return {
-           using exception_t = std::remove_cvref_t<Exception>;
-           std::exception_ptr exc{};
+      auto apply_exception = [func = std::forward<FUN>(func),
+                              ... args =
+                                std::forward<ARGS>(args)](auto const& exception) constexpr mutable {
+         auto exception_wrapper = [&exception](auto&& invoke) constexpr {
+            if constexpr (IS_EXC_PTR) {
+               return invoke(exception);
+            } else {
+               try {
+                  std::rethrow_exception(exception);
+               } catch (Exception const& ex) {
+                  return invoke(ex);
+               }
+            }
+         };
 
-           try {
-              if constexpr (std::is_void_v<T>) {
-                 co_await self;
-                 if constexpr (std::is_void_v<T2>) {
-                    co_return;
-                 } else {
-                    co_return std::optional<T2>{};
-                 }
-              } else {
-                 co_return co_await self;
-              }
-           } catch (exception_t const&) {
-              exc = std::current_exception();
-           } catch (...) {
-              if constexpr (IS_EXC_PTR) {
-                 exc = std::current_exception();
-              } else {
-                 throw;
-              }
-           }
+         return exception_wrapper([func = std::forward<FUN>(func),
+                                   ... args =
+                                     std::forward<ARGS>(args)](auto const& ex) constexpr mutable {
+            if constexpr (IS_PROMISE<FUN>) {
+               return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
+            } else {
+               if constexpr (std::is_void_v<T2>) {
+                  func(ex, std::forward<ARGS>(args)...);
+                  if constexpr (!std::is_void_v<T>) {
+                     return std::optional<T>{};
+                  }
+               } else {
+                  return func(ex, std::forward<ARGS>(args)...);
+               }
+            }
+         });
+      };
 
-           assert(exc);
+      auto resolve_wrapper = [](auto&& promise, auto&& resolve) constexpr {
+         if constexpr (std::is_void_v<T2>) {
+            if constexpr (std::is_void_v<T>) {
+               return promise.Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); });
+            } else {
+               return promise.Then([resolve = std::move(resolve)]() constexpr {
+                  (*resolve)(std::nullopt);
+               });
+            }
+         } else {
+            return promise.Then([resolve = std::move(resolve)](T2 const& value) constexpr {
+               (*resolve)(value);
+            });
+         }
+      };
 
-           auto exception_wrapper = [&](auto&& invoke) constexpr -> decltype(auto) {
-              if constexpr (IS_EXC_PTR) {
-                 return invoke(exc);
-              } else {
+      try {
+         if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+            auto const& exception = this->GetException(lock);
+            if (exception) {
+               lock.unlock();
+
+               if constexpr (IS_PROMISE<FUN>) {
+                  auto [promise, resolve, reject] = promise::Pure<ReturnType>();
+                  resolve_wrapper(apply_exception(exception), std::move(resolve))
+                    .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+                       (*reject)(std::move(exception));
+                    })
+                    .Detach();
+
+                  return promise;
+               } else {
+                  if constexpr (std::is_void_v<std::invoke_result_t<
+                                  decltype(apply_exception),
+                                  decltype((exception))>>) {
+                     apply_exception(exception);
+                     return details::WPromise<ReturnType>::Resolve();
+                  } else {
+                     return details::WPromise<ReturnType>::Resolve(apply_exception(exception));
+                  }
+               }
+            } else if constexpr (std::is_void_v<
+                                   std::invoke_result_t<decltype(apply_value), decltype((lock))>>) {
+               apply_value(lock);
+               return details::WPromise<ReturnType>::Resolve();
+            } else {
+               return details::WPromise<ReturnType>::Resolve(apply_value(lock));
+            }
+         } else {
+            lock.unlock();
+
+            auto [promise, resolve, reject] = promise::Pure<ReturnType>();
+
+            Await(
+              [this,
+               resolve         = std::move(resolve),
+               reject          = std::move(reject),
+               apply_exception = std::move(apply_exception),
+               apply_value     = std::move(apply_value),
+               resolve_wrapper = std::move(resolve_wrapper),
+               ... args        = std::forward<ARGS>(args)] constexpr mutable {
+                 std::shared_lock lock{this->mutex_};
+                 auto const&      exception = this->GetException(lock);
+
                  try {
-                    std::rethrow_exception(exc);
-                 } catch (exception_t const& exc) {
-                    if constexpr (IS_PROMISE<FUN> && std::is_lvalue_reference_v<Exception>) {
-                       // Copy exception to avoid dangling reference if func captures it by
-                       // reference and is called after this scope
-                       return MakePromise([exc, invoke = std::move(invoke)]() -> Return {
-                          co_return co_await invoke(exc);
-                       });
+                    if (exception) {
+                       lock.unlock();
+
+                       if constexpr (IS_PROMISE<FUN>) {
+                          resolve_wrapper(apply_exception(exception), std::move(resolve))
+                            .Catch([reject = std::move(reject)](std::exception_ptr exception
+                                   ) constexpr { (*reject)(std::move(exception)); })
+                            .Detach();
+                       } else {
+                          (void)resolve_wrapper;
+
+                          if constexpr (std::is_void_v<std::invoke_result_t<
+                                          decltype(apply_exception),
+                                          decltype(exception)>>) {
+                             apply_exception(exception);
+                             (*resolve)();
+                          } else {
+                             (*resolve)(apply_exception(exception));
+                          }
+                       }
                     } else {
-                       return invoke(exc);
+                       if constexpr (std::is_void_v<std::invoke_result_t<
+                                       decltype(apply_value),
+                                       decltype((lock))>>) {
+                          apply_value(lock);
+                          (*resolve)();
+                       } else {
+                          (*resolve)(apply_value(lock));
+                       }
                     }
+                 } catch (...) {
+                    if (lock.owns_lock()) {
+                       lock.unlock();
+                    }
+
+                    (*reject)(std::current_exception());
                  }
-              }
-           };
+              },
+              lock
+            );
 
-           if constexpr (std::is_void_v<T2>) {
-              if constexpr (IS_PROMISE<FUN>) {
-                 co_await exception_wrapper([&](auto const& ex) constexpr {
-                    return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
-                 });
-              } else {
-                 exception_wrapper([&](auto const& ex) constexpr {
-                    func(ex, std::forward<ARGS>(args)...);
-                 });
-              }
-
-              if constexpr (std::is_void_v<T>) {
-                 co_return;
-              } else {
-                 co_return std::optional<T>{};
-              }
-           } else {
-              if constexpr (IS_PROMISE<FUN>) {
-                 co_return co_await exception_wrapper([&](auto const& ex) {
-                    return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
-                 });
-              } else {
-                 co_return exception_wrapper([&](auto const& ex) {
-                    return func(ex, std::forward<ARGS>(args)...);
-                 });
-              }
-           }
-        },
-        *this,
-        std::forward<ARGS>(args)...
-      );
+            return std::move(promise);
+         }
+      } catch (...) {
+         return details::WPromise<ReturnType>::Reject(std::current_exception());
+      }
    }
 
    /**
@@ -651,142 +795,125 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Finally(FUN&& func) & {
-      {
-         // Optimisation skip coroutine frame creation
+      static_assert(!IS_WPROMISE<FUN>, "Finally does not support promise wrapper!");
 
-         if (std::shared_lock lock{this->mutex_}; this->IsResolved(lock)) {
-            if constexpr (!IS_PROMISE<FUN>) {
-               try {
-                  func();
+      auto apply_value = [](auto&& resolve, auto&& reject, auto&& func, auto&&... value) constexpr {
+         static_assert(sizeof...(value) == (IS_VOID ? 0 : 1));
 
-                  if constexpr (IS_VOID) {
-                     return WPromise<T>::Resolve();
-                  } else {
-                     return WPromise<T>::Resolve(this->GetValue(lock));
-                  }
-               } catch (...) {
-                  return WPromise<T>::Reject(std::current_exception());
-               }
-            } else if constexpr (IS_VOID) {
-               using promise_t = return_t<decltype(std::function{func})>;
-               using T2        = return_t<promise_t>;
-               if constexpr (std::is_void_v<T2>) {
-                  return ::MakePromise(std::move(func)).Then([]() constexpr {});
-               } else {
-                  return ::MakePromise(std::move(func)).Then([](T2 const&) constexpr {});
-               }
+         if constexpr (IS_PROMISE<FUN>) {
+            if constexpr (std::is_void_v<T>) {
+               MakePromise(std::forward<FUN>(func))
+                 .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); })
+                 .Catch([reject](std::exception_ptr exception) constexpr {
+                    (*reject)(std::move(exception));
+                 })
+                 .Detach();
             } else {
-               using promise_t = return_t<decltype(std::function{func})>;
-               using T2        = return_t<promise_t>;
-               if constexpr (std::is_void_v<T2>) {
-                  return ::MakePromise(std::move(func))
-                    .Then([value = this->GetValue(lock)]() constexpr { return value; });
+               MakePromise(std::forward<FUN>(func))
+                 .Then([resolve = std::move(resolve), value = value...[0]]() constexpr {
+                    (*resolve)(value);
+                 })
+                 .Catch([reject](std::exception_ptr exception) constexpr {
+                    (*reject)(std::move(exception));
+                 })
+                 .Detach();
+            }
+         } else {
+            try {
+               if constexpr (std::is_void_v<T>) {
+                  func();
+                  (*resolve)();
                } else {
-                  return ::MakePromise(std::move(func))
-                    .Then([value = this->GetValue(lock)](T2 const&) constexpr { return value; });
+                  func();
+                  (*resolve)(value...[0]);
                }
+            } catch (...) {
+               (*reject)(std::current_exception());
             }
          }
-      }  // else @todo
+      };
 
-      if constexpr (IS_PROMISE<FUN>) {
-         return ::MakePromise(
-           [func = std::forward<FUN>(func)](
-             promise::Resolve<T> const&           resolve,
-             promise::Reject const&               reject,
-             details::IPromise<T, WITH_RESOLVER>& self
-           ) -> details::IPromise<T, true> {
-              if constexpr (IS_VOID) {
-                 std::exception_ptr exception;
-                 try {
-                    co_await self;
-                 } catch (...) {
-                    exception = std::current_exception();
-                 }
-                 co_await ::MakePromise(std::move(func));
-
-                 if (exception) {
-                    reject(exception);
-                 } else {
-                    resolve();
-                 }
-                 co_return;
-              } else {
-                 std::exception_ptr exception;
-                 bool               prom_exception = true;
-
-                 try {
-                    auto result    = co_await self;
-                    prom_exception = false;
-                    co_await ::MakePromise(std::move(func));
-                    resolve(result);
-                    co_return;
-                 } catch (...) {
-                    exception = std::current_exception();
-                 }
-
-                 assert(exception);
-                 if (prom_exception) {
-                    // If the exception come from the promise, we want to call func before
-                    // rethrowing it
-                    co_await ::MakePromise(std::move(func));
-                 }
-
-                 reject(exception);
-                 co_return;
-              }
-           },
-           *this
-         );
-      } else {
-         return ::MakePromise(
-           [func = std::forward<FUN>(func)](
-             promise::Resolve<T> const& resolve,
-             promise::Reject const&     reject,
-             Promise<T, WITH_RESOLVER>& self
-           ) -> details::IPromise<T, true> {
-              std::exception_ptr exception;
-
-              if constexpr (IS_VOID) {
-                 try {
-                    co_await self;
-                 } catch (...) {
-                    exception = std::current_exception();
-                 }
-
+      auto apply_exception =
+        [](auto&& reject, auto&& func, std::exception_ptr exception) constexpr {
+           if constexpr (IS_PROMISE<FUN>) {
+              MakePromise(std::forward<FUN>(func))
+                .Then([reject, exception = std::move(exception)]() constexpr {
+                   (*reject)(exception);
+                })
+                .Catch([reject](std::exception_ptr exception) constexpr {
+                   (*reject)(std::move(exception));
+                })
+                .Detach();
+           } else {
+              try {
                  func();
+                 (*reject)(std::move(exception));
+              } catch (...) {
+                 (*reject)(std::current_exception());
+              }
+           }
+        };
 
+      auto [promise, resolve, reject] = promise::Pure<T>();
+      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+         auto const& exception = this->GetException(lock);
+         if (exception) {
+            lock.unlock();
+
+            if constexpr (IS_PROMISE<FUN>) {
+               apply_exception(reject, std::forward<FUN>(func), exception);
+            } else {
+               apply_exception(reject, std::forward<FUN>(func), exception);
+            }
+         } else if constexpr (IS_VOID) {
+            apply_value(std::move(resolve), std::move(reject), std::forward<FUN>(func));
+         } else {
+            auto const& value = this->GetValue(lock);
+            lock.unlock();
+
+            apply_value(std::move(resolve), reject, std::forward<FUN>(func), value);
+         }
+      } else {
+         lock.unlock();
+
+         Await(
+           [this,
+            resolve         = std::move(resolve),
+            reject          = std::move(reject),
+            func            = std::forward<FUN>(func),
+            apply_exception = std::move(apply_exception),
+            apply_value     = std::move(apply_value)] constexpr mutable {
+              std::shared_lock lock{this->mutex_};
+              auto const&      exception = this->GetException(lock);
+
+              try {
                  if (exception) {
-                    reject(exception);
+                    lock.unlock();
+                    apply_exception(reject, std::move(func), exception);
+                 } else if constexpr (IS_VOID) {
+                    lock.unlock();
+                    apply_value(std::move(resolve), std::move(reject), std::move(func));
                  } else {
-                    resolve();
-                 }
-                 co_return;
-              } else {
-                 bool prom_exception = true;
-                 try {
-                    auto result    = co_await self;
-                    prom_exception = false;
-                    func();
+                    auto const& value = this->GetValue(lock);
+                    lock.unlock();
 
-                    resolve(result);
-                    co_return;
-                 } catch (...) {
-                    exception = std::current_exception();
+                    apply_value(std::move(resolve), reject, std::move(func), value);
+                 }
+              } catch (...) {
+                 if (lock.owns_lock()) {
+                    lock.unlock();
                  }
 
-                 if (prom_exception) {
-                    // If the exception come from the promise, we want to call func before
-                    // rethrowing it
-                    func();
-                 }
-
-                 reject(exception);
+                 (*reject)(std::current_exception());
               }
            },
-           *this
+           lock
          );
+
+         return std::move(promise);
       }
+
+      return promise;
    }
 
    /**
@@ -887,7 +1014,8 @@ public:
    /**
     * @brief Create a promise from a callable and optional resolver.
     **
-    * @tparam RPROMISE Boolean flag indicating whether to return a tuple with resolver and rejector.
+    * @tparam RPROMISE Boolean flag indicating whether to return a tuple with resolver and
+    *rejector.
     * @tparam FUN Type of the callable.
     * @tparam ARGS Types of arguments to forward to the callable.
     **
@@ -960,8 +1088,10 @@ public:
    }
 
 private:
-   std::unique_ptr<Function>            function_{nullptr};
-   std::vector<std::coroutine_handle<>> awaiters_{};
+   using Awaiter = std::variant<std::coroutine_handle<>, std::function<void()>>;
+
+   std::unique_ptr<Function> function_{nullptr};
+   std::vector<Awaiter>      awaiters_{};
 
    friend Handle<T, WITH_RESOLVER>;
 };

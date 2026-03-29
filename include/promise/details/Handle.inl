@@ -308,7 +308,7 @@ public:
    void OnResolved(this SELF&& self, std::unique_lock<std::shared_mutex>& lock) {
       // If not Done, will be done on final_suspends
       if (self.Done(lock)) {
-         std::vector<std::coroutine_handle<>> awaiters{};
+         std::vector<typename std::remove_cvref_t<SELF>::Awaiter> awaiters{};
 
          self.awaiters_.swap(awaiters);
          assert(!self.awaiters_.size());
@@ -318,8 +318,13 @@ public:
 
          // We must not use self anymore !
          for (auto const& awaiter : awaiters) {
-            assert(awaiter);
-            awaiter.resume();
+            if (std::holds_alternative<std::coroutine_handle<>>(awaiter)) {
+               assert(std::get<std::coroutine_handle<>>(awaiter));
+               std::get<std::coroutine_handle<>>(awaiter).resume();
+            } else {
+               assert(std::get<std::function<void()>>(awaiter));
+               std::get<std::function<void()>>(awaiter)();
+            }
          }
       }
    }

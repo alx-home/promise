@@ -96,6 +96,27 @@ template <class FUN>
 using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
 
 template <class T>
+concept HasReturn = requires { typename return_<std::remove_cvref_t<T>>::type; };
+
+template <class T>
+struct ReturnOrVoid;
+
+template <class T>
+   requires(!HasReturn<T>)
+struct ReturnOrVoid<T> {
+   using type = void;
+};
+
+template <class T>
+   requires(HasReturn<T>)
+struct ReturnOrVoid<T> {
+   using type = return_t<T>;
+};
+
+template <class T>
+using return_or_void_t = typename ReturnOrVoid<T>::type;
+
+template <class T>
 struct IsResolver : std::false_type {};
 
 template <class T>
@@ -157,7 +178,7 @@ struct IsWPromise<details::WPromise<T>> : std::true_type {};
  * @tparam FUN Type to check.
  */
 template <class FUN>
-static constexpr bool IS_PROMISE = IsPromise<return_t<FUN>>::value;
+static constexpr bool IS_PROMISE = IsPromise<return_or_void_t<FUN>>::value;
 
 /**
  * @brief Check if a type is a promise wrapper.
