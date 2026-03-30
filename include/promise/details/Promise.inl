@@ -683,6 +683,7 @@ private:
          }
       };
 
+      auto [promise, resolve, reject] = promise::Pure<ReturnType>();
       try {
          if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
             auto const& exception = this->GetException(lock);
@@ -690,35 +691,30 @@ private:
                lock.unlock();
 
                if constexpr (IS_PROMISE<FUN>) {
-                  auto [promise, resolve, reject] = promise::Pure<ReturnType>();
                   resolve_wrapper(apply_exception(exception), std::move(resolve))
-                    .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+                    .Catch([reject](std::exception_ptr exception) constexpr {
                        (*reject)(std::move(exception));
                     })
                     .Detach();
-
-                  return std::move(promise);
                } else {
                   if constexpr (std::is_void_v<std::invoke_result_t<
                                   decltype(apply_exception),
                                   decltype((exception))>>) {
                      apply_exception(exception);
-                     return details::WPromise<ReturnType>::Resolve();
+                     (*resolve)();
                   } else {
-                     return details::WPromise<ReturnType>::Resolve(apply_exception(exception));
+                     (*resolve)(apply_exception(exception));
                   }
                }
             } else if constexpr (std::is_void_v<
                                    std::invoke_result_t<decltype(apply_value), decltype((lock))>>) {
                apply_value(lock);
-               return details::WPromise<ReturnType>::Resolve();
+               (*resolve)();
             } else {
-               return details::WPromise<ReturnType>::Resolve(apply_value(lock));
+               (*resolve)(apply_value(lock));
             }
          } else {
             lock.unlock();
-
-            auto [promise, resolve, reject] = promise::Pure<ReturnType>();
 
             Await(
               [this,
@@ -772,12 +768,12 @@ private:
               },
               lock
             );
-
-            return std::move(promise);
          }
       } catch (...) {
-         return details::WPromise<ReturnType>::Reject(std::current_exception());
+         (*reject)(std::current_exception());
       }
+
+      return std::move(promise);
    }
 
    /**
