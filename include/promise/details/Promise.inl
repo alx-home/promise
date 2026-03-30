@@ -926,8 +926,6 @@ private:
            },
            lock
          );
-
-         return std::move(promise);
       }
 
       return std::move(promise);
