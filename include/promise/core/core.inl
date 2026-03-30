@@ -53,7 +53,7 @@ template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
 
 namespace details {
-template <class T, bool WITH_RESOLVER>
+template <class T, bool WITH_RESOLVER = false>
 class Promise;
 }
 

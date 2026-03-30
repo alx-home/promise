@@ -248,14 +248,7 @@ namespace promise {
 template <class T>
 static constexpr auto
 Pure() {
-   auto [resolver, resolve, reject] = MakeResolver<T>();
-   auto promise = ([](Resolve<T> const&, Reject const&) -> details::IPromise<T, true> {
-      co_return;
-   }(*resolve, *reject));
-
-   return std::make_tuple(
-     details::WPromise<T>{std::move(promise(std::move(resolver)))}, resolve, reject
-   );
+   return details::Promise<T>::Pure();
 }
 
 }  // namespace promise

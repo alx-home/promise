@@ -212,7 +212,10 @@ private:
    auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
       assert(!this->resolver_);
       this->resolver_ = std::move(resolver);
-      return this->handle_();
+
+      if (this->handle_) {
+         return this->handle_();
+      }
    }
 
    /**
@@ -957,19 +960,41 @@ public:
     *
     * @return Resolved promise.
     */
+   static constexpr auto Pure() {
+      if constexpr (WITH_RESOLVER) {
+         details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
+
+         auto resolver = std::make_unique<promise::Resolver<T, WITH_RESOLVER>>();
+         auto resolve  = resolver->resolve_;
+         auto reject   = resolver->reject_;
+
+         auto const details =
+           std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
+         resolver->promise_ = details;
+         details->resolver_ = std::move(resolver);
+
+         return std::make_tuple(
+           details::WPromise<T>{std::move(promise)}, std::move(resolve), std::move(reject)
+         );
+      } else {
+         return Promise<T, true>::Pure();
+      }
+   }
+
+   /**
+    * @brief Create a resolved promise without starting a coroutine.
+    *
+    * @tparam ARGS Types of arguments to forward to the resolver.
+    *
+    * @param args Constructor args for the resolved value (if any).
+    *
+    * @return Resolved promise.
+    */
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
-      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
-      auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
-
-      auto const details =
-        std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
-      resolver->promise_ = details;
-      details->resolver_ = std::move(resolver);
-
-      details->resolver_->Resolve(std::forward<ARGS>(args)...);
-
-      return WPromise<T>{std::move(promise)};
+      auto [promise, resolve, _] = Promise<T, true>::Pure();
+      (*resolve)(std::forward<ARGS>(args)...);
+      return std::move(promise);
    }
 
    /**
@@ -983,19 +1008,9 @@ public:
     */
    template <class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
-      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
-      auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
-
-      using Promise = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
-
-      assert(std::holds_alternative<Promise>(promise.details_));
-      auto const details = std::get<Promise>(promise.details_).get();
-      resolver->promise_ = details;
-      details->resolver_ = std::move(resolver);
-
-      details->resolver_->Reject(std::forward<ARGS>(args)...);
-
-      return WPromise<T>{std::move(promise)};
+      auto [promise, _, reject] = Promise<T, true>::Pure();
+      (*reject)(std::forward<ARGS>(args)...);
+      return std::move(promise);
    }
 
    /**
@@ -1010,19 +1025,9 @@ public:
     */
    template <class EXCEPTION, class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
-      details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
-      auto                                resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
-
-      using Promise = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
-
-      assert(std::holds_alternative<Promise>(promise.details_));
-      auto const details = std::get<Promise>(promise.details_).get();
-      resolver->promise_ = details;
-      details->resolver_ = std::move(resolver);
-
-      details->resolver_->Reject(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
-
-      return WPromise<T>{std::move(promise)};
+      auto [promise, _, reject] = Promise<T, true>::Pure();
+      (*reject)(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
+      return std::move(promise);
    }
 
    /**
