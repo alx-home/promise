@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include "../core/core.inl"
 
+#include <sys/stat.h>
 #include <utils/Scoped.h>
 #include <algorithm>
 #include <cassert>
@@ -112,7 +113,7 @@ struct UniqueVariantHelper<V, T, TS...> {
    template <typename T2, typename... US>
    struct add_if_missing<T2, std::variant<US...>> {
       using type = std::conditional_t<
-        (std::is_same_v<T2, US> || ...),
+        (std::is_same_v<T2, US> || ...) || std::is_void_v<T2>,
         std::variant<US...>,
         std::variant<US..., T2>>;
    };
@@ -133,35 +134,61 @@ using unique_variant = typename UniqueVariantHelper<std::variant<>, TS...>::type
  *
  * @param promise Promises to await.
  *
- * @return Variant of resolved values (std::monostate for void).
+ * @return Variant of resolved values (std::optional if any promise is void).
  */
 template <class... PROMISES>
 static constexpr auto
 Race(PROMISES&&... promise) {
-   auto [race_promise, resolve, reject] = Create<unique_variant<
-     std::
-       conditional_t<std::is_void_v<return_t<PROMISES>>, std::monostate, return_t<PROMISES>>...>>();
+   static_assert(sizeof...(PROMISES) > 0, "Race cannot be called with zero promises !");
+
+   static constexpr auto IS_VOID  = (std::is_void_v<return_t<PROMISES>> && ...);
+   static constexpr auto HAS_VOID = (std::is_void_v<return_t<PROMISES>> || ...);
+
+   using RaceReturn = std::remove_cvref_t<std::remove_pointer_t<decltype([] constexpr {
+      if constexpr (IS_VOID) {
+         return (void*)nullptr;
+      } else {
+         using RaceReturn1 = unique_variant<return_t<PROMISES>...>;
+         static_assert(std::variant_size_v<RaceReturn1> != 0, "Race cannot have zero promises !");
+
+         if constexpr (HAS_VOID) {
+            return (std::optional<RaceReturn1>*)nullptr;
+         } else {
+            return (RaceReturn1*)nullptr;
+         }
+      }
+   }())>>;
+
+   auto [race_promise, resolve, reject] = Create<RaceReturn>();
 
    auto wrapper = [resolve, reject]<class PROMISE>(PROMISE&& promise) constexpr {
       using Return = return_t<PROMISE>;
 
-      // if constexpr (std::is_void_v<Return>) {
-      // // @todo bug compilo ?
-      //    std::forward<decltype(promise)>(promise)
-      //      .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(std::monostate{}); })
-      //      .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
-      //         (*reject)(std::move(exception));
-      //      })
-      //      .Detach();
-      // } else {
-      std::forward<decltype(promise)>(promise)
-        .Then([resolve = std::move(resolve)](Return const& result) constexpr { (*resolve)(result); }
-        )
-        .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
-           (*reject)(std::move(exception));
-        })
-        .Detach();
-      // }
+      if constexpr (std::is_void_v<Return>) {
+         std::forward<PROMISE>(promise)
+           .Then([resolve = std::move(resolve)]() constexpr {
+              if constexpr (IS_VOID) {
+                 (*resolve)();
+              } else {
+                 // Delay type deduction of the variant to avoid compile errors
+                 using Return = std::conditional_t<std::is_void_v<Return>, RaceReturn, RaceReturn>;
+                 (*resolve)(Return{std::nullopt});
+              }
+           })
+           .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+              (*reject)(std::move(exception));
+           })
+           .Detach();
+      } else {
+         std::forward<PROMISE>(promise)
+           .Then([resolve = std::move(resolve)](Return const& result) constexpr {
+              (*resolve)(result);
+           })
+           .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+              (*reject)(std::move(exception));
+           })
+           .Detach();
+      }
    };
 
    (wrapper(std::forward<PROMISES>(promise)), ...);
