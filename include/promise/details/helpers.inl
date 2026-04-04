@@ -206,6 +206,9 @@ MakePromise(FUN&& func, ARGS&&... args) {
    using Return = std::remove_cvref_t<std::remove_pointer_t<decltype([] constexpr {
       if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 1) {
          if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+            static_assert(
+              std::is_void_v<return_t<FUN>>, "Resolver-style promise cannot have a return value"
+            );
             return static_cast<promise::RESOLVE_TYPE<std::tuple_element_t<0, all_args_t<FUN>>>*>(
               nullptr
             );
