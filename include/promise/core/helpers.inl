@@ -37,13 +37,26 @@ struct Reject;
  *
  * @tparam FUN Function type (std::function).
  *
- * @param func Callable that returns Promise<T> or T.
+ * @param func Callable that returns Promise<T>.
  * @param args Arguments forwarded to the callable.
  *
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
-   requires(promise::IS_FUNCTION<FUN>)
+   requires(promise::IS_FUNCTION<FUN> && promise::IS_PROMISE<FUN> && !promise::IS_WPROMISE<FUN>)
+[[nodiscard("Either store this promise or call Detach()")]] static constexpr auto
+MakePromise(FUN&& func, ARGS&&... args);
+
+/**
+ * @brief Build a Pure Promise from a std::function.
+ *
+ * @param func Callable returning a Promise or value.
+ * @param args Arguments forwarded to the callable.
+ *
+ * @return Constructed promise.
+ */
+template <class FUN, class... ARGS>
+   requires(promise::IS_FUNCTION<FUN> && (!promise::IS_PROMISE<FUN> || promise::IS_WPROMISE<FUN>))
 [[nodiscard("Either store this promise or call Detach()")]] static constexpr auto
 MakePromise(FUN&& func, ARGS&&... args);
 
@@ -58,7 +71,7 @@ MakePromise(FUN&& func, ARGS&&... args);
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN>)
+   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN>)
 [[nodiscard("Either store this promise or call Detach()")]] static constexpr auto
 MakePromise(FUN&& func, ARGS&&... args);
 
@@ -87,7 +100,7 @@ template <class FUN, class... ARGS>
  * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN>)
+   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN> && promise::WITH_RESOLVER<FUN>)
 [[nodiscard]] static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
 /**

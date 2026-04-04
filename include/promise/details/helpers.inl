@@ -32,8 +32,6 @@ SOFTWARE.
 #include <exception>
 #include <functional>
 #include <memory>
-#include <optional>
-#include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -48,7 +46,7 @@ SOFTWARE.
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN>)
+   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN>)
 static constexpr auto
 MakePromise(FUN&& func, ARGS&&... args) {
    return MakePromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);
@@ -182,7 +180,7 @@ Race(PROMISES&&... promise) {
  * @return Constructed promise.
  */
 template <class FUN, class... ARGS>
-   requires(promise::IS_FUNCTION<FUN>)
+   requires(promise::IS_FUNCTION<FUN> && promise::IS_PROMISE<FUN> && !promise::IS_WPROMISE<FUN>)
 static constexpr auto
 MakePromise(FUN&& func, ARGS&&... args) {
    using namespace promise;
@@ -190,6 +188,70 @@ MakePromise(FUN&& func, ARGS&&... args) {
    return details::Promise<return_t<return_t<FUN>>, WITH_RESOLVER<FUN>>::template Create<false>(
      std::forward<FUN>(func), std::forward<ARGS>(args)...
    );
+}
+
+/**
+ * @brief Build a Pure Promise from a std::function.
+ *
+ * @param func Callable returning a Promise or value.
+ * @param args Arguments forwarded to the callable.
+ *
+ * @return Constructed promise.
+ */
+template <class FUN, class... ARGS>
+   requires(promise::IS_FUNCTION<FUN> && (!promise::IS_PROMISE<FUN> || promise::IS_WPROMISE<FUN>))
+static constexpr auto
+MakePromise(FUN&& func, ARGS&&... args) {
+   using namespace promise;
+   using Return = std::remove_cvref_t<std::remove_pointer_t<decltype([] constexpr {
+      if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 1) {
+         if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+            return static_cast<promise::RESOLVE_TYPE<std::tuple_element_t<0, all_args_t<FUN>>>*>(
+              nullptr
+            );
+         } else {
+            return static_cast<return_t<FUN>*>(nullptr);
+         }
+      } else {
+         return static_cast<return_t<FUN>*>(nullptr);
+      }
+   }())>>;
+
+   auto [promise, resolve, reject] = details::Promise<Return>::Pure();
+
+   try {
+      if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
+         if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
+                       && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>) {
+            func(*resolve, *reject, std::forward<ARGS>(args)...);
+         } else if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+            func(*resolve, std::forward<ARGS>(args)...);
+         } else if constexpr (std::is_void_v<Return>) {
+            func(std::forward<ARGS>(args)...);
+            (*resolve)();
+         } else {
+            (*resolve)(func(std::forward<ARGS>(args)...));
+         }
+      } else if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 1) {
+         if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
+            func(*resolve, std::forward<ARGS>(args)...);
+         } else if constexpr (std::is_void_v<Return>) {
+            func(std::forward<ARGS>(args)...);
+            (*resolve)();
+         } else {
+            (*resolve)(func(std::forward<ARGS>(args)...));
+         }
+      } else if constexpr (std::is_void_v<Return>) {
+         func(std::forward<ARGS>(args)...);
+         (*resolve)();
+      } else {
+         (*resolve)(func(std::forward<ARGS>(args)...));
+      }
+   } catch (...) {
+      (*reject)(std::current_exception());
+   }
+
+   return promise;
 }
 
 /**
@@ -220,7 +282,7 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
  * @return Constructed resolver-style promise or tuple.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN> && promise::WITH_RESOLVER<FUN>)
+   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN> && promise::WITH_RESOLVER<FUN>)
 static constexpr auto
 MakeRPromise(FUN&& func, ARGS&&... args) {
    return MakeRPromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);

@@ -312,6 +312,31 @@ main() {
                  });
             }
 
+            auto const prom_pure1 = MakePromise([] constexpr { return 42; });
+            std::cout << "prom_pure1 " << co_await prom_pure1 << std::endl;
+
+            auto const prom_pure2 =
+              MakePromise([](Resolve<int> const& resolve) constexpr { resolve(42); });
+            std::cout << "prom_pure2 " << co_await prom_pure2 << std::endl;
+
+            auto const prom_pure3 =
+              MakePromise([](Resolve<int> const&, Reject const& reject) constexpr {
+                 reject.Apply<std::runtime_error>("test");
+              }).Catch([](std::runtime_error const& exception) constexpr {
+                 std::cout << "prom_pure3 exception: " << exception.what() << std::endl;
+              });
+
+            auto const prom_pure4 = MakePromise([](Resolve<int> const&) constexpr {
+                                       throw std::runtime_error("test");
+                                    }).Catch([](std::runtime_error const& exception) constexpr {
+               std::cout << "prom_pure4 exception: " << exception.what() << std::endl;
+            });
+
+            auto const prom_pure5 = MakePromise([]() constexpr { throw std::runtime_error("test"); }
+            ).Catch([](std::runtime_error const& exception) constexpr {
+               std::cout << "prom_pure5 exception: " << exception.what() << std::endl;
+            });
+
             try {
                co_await MakePromise([&]() -> WPromise<void> { return Test(); });
             } catch (std::exception const& e) {

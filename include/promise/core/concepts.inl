@@ -157,6 +157,22 @@ struct WithResolver<details::IPromise<T, true>> : std::true_type {};
 template <class FUN>
 static constexpr bool WITH_RESOLVER = WithResolver<return_t<FUN>>::value;
 
+template <class T>
+struct ResolveType;
+
+template <class T>
+struct ResolveType<promise::Resolve<T>> {
+   using type = T;
+};
+
+/**
+ * @brief Get the type resolved by a resolver.
+ *
+ * @tparam T Resolver type.
+ */
+template <class T>
+using RESOLVE_TYPE = typename ResolveType<std::remove_cvref_t<T>>::type;
+
 template <class FUN>
 struct IsPromise : std::false_type {};
 
