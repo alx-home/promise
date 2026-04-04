@@ -138,7 +138,7 @@ using unique_variant = typename UniqueVariantHelper<std::variant<>, TS...>::type
 template <class... PROMISES>
 static constexpr auto
 Race(PROMISES&&... promise) {
-   auto [race_promise, resolve, reject] = Pure<unique_variant<
+   auto [race_promise, resolve, reject] = Create<unique_variant<
      std::
        conditional_t<std::is_void_v<return_t<PROMISES>>, std::monostate, return_t<PROMISES>>...>>();
 
@@ -191,7 +191,7 @@ MakePromise(FUN&& func, ARGS&&... args) {
 }
 
 /**
- * @brief Build a Pure Promise from a std::function.
+ * @brief Build a Create Promise from a std::function.
  *
  * @param func Callable returning a Promise or value.
  * @param args Arguments forwarded to the callable.
@@ -220,7 +220,7 @@ MakePromise(FUN&& func, ARGS&&... args) {
       }
    }())>>;
 
-   auto [promise, resolve, reject] = details::Promise<Return>::Pure();
+   auto [promise, resolve, reject] = details::Promise<Return>::Create();
 
    try {
       if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
@@ -312,8 +312,8 @@ namespace promise {
  */
 template <class T>
 static constexpr auto
-Pure() {
-   return details::Promise<T>::Pure();
+Create() {
+   return details::Promise<T>::Create();
 }
 
 }  // namespace promise

@@ -116,14 +116,14 @@ main() {
                 .Then([]() { return 800; }),
             };
 
-            auto [prom_pure, resolve, reject] = promise::Pure<int>();
+            auto [prom_Create, resolve, reject] = promise::Create<int>();
 
-            auto prom_pure_wait{MakePromise([&prom_pure]() -> Promise<int> {
-               co_return co_await prom_pure;
+            auto prom_Create_wait{MakePromise([&prom_Create]() -> Promise<int> {
+               co_return co_await prom_Create;
             })};
             (*resolve)(888);
 
-            std::cout << "pure " << co_await prom_pure_wait << std::endl;
+            std::cout << "Create " << co_await prom_Create_wait << std::endl;
 
             auto prom_int{
               prom2
@@ -312,29 +312,30 @@ main() {
                  });
             }
 
-            auto const prom_pure1 = MakePromise([] constexpr { return 42; });
-            std::cout << "prom_pure1 " << co_await prom_pure1 << std::endl;
+            auto const prom_Create1 = MakePromise([] constexpr { return 42; });
+            std::cout << "prom_Create1 " << co_await prom_Create1 << std::endl;
 
-            auto const prom_pure2 =
+            auto const prom_Create2 =
               MakePromise([](Resolve<int> const& resolve) constexpr { resolve(42); });
-            std::cout << "prom_pure2 " << co_await prom_pure2 << std::endl;
+            std::cout << "prom_Create2 " << co_await prom_Create2 << std::endl;
 
-            auto const prom_pure3 =
+            auto const prom_Create3 =
               MakePromise([](Resolve<int> const&, Reject const& reject) constexpr {
                  reject.Apply<std::runtime_error>("test");
               }).Catch([](std::runtime_error const& exception) constexpr {
-                 std::cout << "prom_pure3 exception: " << exception.what() << std::endl;
+                 std::cout << "prom_Create3 exception: " << exception.what() << std::endl;
               });
 
-            auto const prom_pure4 = MakePromise([](Resolve<int> const&) constexpr {
-                                       throw std::runtime_error("test");
-                                    }).Catch([](std::runtime_error const& exception) constexpr {
-               std::cout << "prom_pure4 exception: " << exception.what() << std::endl;
+            auto const prom_Create4 = MakePromise([](Resolve<int> const&) constexpr {
+                                         throw std::runtime_error("test");
+                                      }).Catch([](std::runtime_error const& exception) constexpr {
+               std::cout << "prom_Create4 exception: " << exception.what() << std::endl;
             });
 
-            auto const prom_pure5 = MakePromise([]() constexpr { throw std::runtime_error("test"); }
-            ).Catch([](std::runtime_error const& exception) constexpr {
-               std::cout << "prom_pure5 exception: " << exception.what() << std::endl;
+            auto const prom_Create5 = MakePromise([]() constexpr {
+                                         throw std::runtime_error("test");
+                                      }).Catch([](std::runtime_error const& exception) constexpr {
+               std::cout << "prom_Create5 exception: " << exception.what() << std::endl;
             });
 
             try {

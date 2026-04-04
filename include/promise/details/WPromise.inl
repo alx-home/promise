@@ -345,6 +345,8 @@ public:
       return Promise::template Reject<EXCEPTION>(std::forward<ARGS>(args)...);
    }
 
+   static constexpr auto Create() { return RPromise::Create(); }
+
    /**
     * @brief Detach so the promise can live independently of this handle.
     *

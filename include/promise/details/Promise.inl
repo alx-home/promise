@@ -439,7 +439,7 @@ private:
          // Promise return type
          using T2 = return_t<return_t<FUN>>;
 
-         auto [promise, resolve, reject] = promise::Pure<T2>();
+         auto [promise, resolve, reject] = promise::Create<T2>();
          Await(
            [this,
             func     = std::forward<FUN>(func),
@@ -491,7 +491,7 @@ private:
          // Function return type
          using T2 = return_t<FUN>;
 
-         auto [promise, resolve, reject] = promise::Pure<T2>();
+         auto [promise, resolve, reject] = promise::Create<T2>();
          Await(
            [this,
             func     = std::forward<FUN>(func),
@@ -683,7 +683,7 @@ private:
          }
       };
 
-      auto [promise, resolve, reject] = promise::Pure<ReturnType>();
+      auto [promise, resolve, reject] = promise::Create<ReturnType>();
       try {
          if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
             auto const& exception = this->GetException(lock);
@@ -867,7 +867,7 @@ private:
            }
         };
 
-      auto [promise, resolve, reject] = promise::Pure<T>();
+      auto [promise, resolve, reject] = promise::Create<T>();
       if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
          auto const& exception = this->GetException(lock);
          if (exception) {
@@ -954,7 +954,7 @@ public:
     *
     * @return Resolved promise.
     */
-   static constexpr auto Pure() {
+   static constexpr auto Create() {
       if constexpr (WITH_RESOLVER) {
          details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
 
@@ -971,7 +971,7 @@ public:
            details::WPromise<T>{std::move(promise)}, std::move(resolve), std::move(reject)
          );
       } else {
-         return Promise<T, true>::Pure();
+         return Promise<T, true>::Create();
       }
    }
 
@@ -986,7 +986,7 @@ public:
     */
    template <class... ARGS>
    static constexpr auto Resolve(ARGS&&... args) {
-      auto [promise, resolve, _] = Promise<T, true>::Pure();
+      auto [promise, resolve, _] = Promise<T, true>::Create();
       (*resolve)(std::forward<ARGS>(args)...);
       return std::move(promise);
    }
@@ -1002,7 +1002,7 @@ public:
     */
    template <class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
-      auto [promise, _, reject] = Promise<T, true>::Pure();
+      auto [promise, _, reject] = Promise<T, true>::Create();
       (*reject)(std::forward<ARGS>(args)...);
       return std::move(promise);
    }
@@ -1019,7 +1019,7 @@ public:
     */
    template <class EXCEPTION, class... ARGS>
    static constexpr auto Reject(ARGS&&... args) {
-      auto [promise, _, reject] = Promise<T, true>::Pure();
+      auto [promise, _, reject] = Promise<T, true>::Create();
       (*reject)(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
       return std::move(promise);
    }

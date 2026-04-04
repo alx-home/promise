@@ -48,7 +48,7 @@ template <class FUN, class... ARGS>
 MakePromise(FUN&& func, ARGS&&... args);
 
 /**
- * @brief Build a Pure Promise from a std::function.
+ * @brief Build a Create Promise from a std::function.
  *
  * @param func Callable returning a Promise or value.
  * @param args Arguments forwarded to the callable.
@@ -121,12 +121,12 @@ bool MakeReject(promise::Reject const& reject, ARGS&&... args);
 
 namespace promise {
 /**
- * @brief Create a pure promise and its resolver.
+ * @brief Create a Create promise and its resolver.
  *
  * @tparam T Promise value type.
  *
  * @return Tuple of (promise, resolve handle, reject handle).
  */
 template <class T>
-static constexpr auto Pure();
+static constexpr auto Create();
 }  // namespace promise

@@ -14,7 +14,7 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - C++20 coroutine promise type with `co_await` support.
 - Chaining: `Then`, `Catch`, `Finally`.
 - Resolver promises: `Promise<T, true>` plus `Resolve<T>` and `Reject`.
-- Helpers: `promise::All(...)` and `promise::Pure<T>()`.
+- Helpers: `promise::All(...)` and `promise::Create<T>()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
 - Public handle types: `Promise<T>` (coroutine return), `WPromise<T>` (owning handle), and `VPromise` for type-erased pointers.
 - Lambdas are stored in the promise, so captures survive until resolution.
@@ -92,7 +92,7 @@ Promise<void> Demo() {
 #include <promise/promise.h>
 #include <stdexcept>
 
-auto [pure, resolve, reject] = promise::Pure<int>();
+auto [Create, resolve, reject] = promise::Create<int>();
 resolve->operator()(7);
 
 auto all = promise::All(
@@ -273,7 +273,7 @@ state is kept alive (for example by calling `Detach()` or storing the promise el
 ```cpp
 #include <promise/promise.h>
 
-auto [prom, resolve, reject] = promise::Pure<int>();
+auto [prom, resolve, reject] = promise::Create<int>();
 
 StartAsyncWork([resolve]() {
 	(*resolve)(42);
@@ -364,8 +364,8 @@ Catch argument rules:
 - Typed `Catch(const T&)` is implemented by rethrowing the stored `std::exception_ptr` and
   catching `const T&`, so it works on standard-conforming compilers and only matches when the
   stored exception is of type `T`.
- - For typed `Catch(const T&)` that returns a promise, the exception is copied before the
-	 continuation runs to avoid dangling references when the continuation is async.
+- For typed `Catch(const T&)` that returns a promise, the exception is copied before the
+  continuation runs to avoid dangling references when the continuation is async.
 
 You can also use standard `try { } catch { }` inside a coroutine when awaiting another promise.
 Exceptions raised by an awaited promise propagate through `co_await` and can be handled normally.
