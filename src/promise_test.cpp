@@ -239,26 +239,36 @@ main() {
 
             std::cout << "prom_catch_asyn " << *(co_await prom_catch_asyn) << std::endl;
             {
-               auto prom_race1 = MakePromise([]() -> Promise<double> {
+               auto [prom_race_delay, resolve, _] = Promise<void>::Create();
+               auto prom_race1 = MakePromise([&prom_race_delay]() -> Promise<double> {
+                  co_await prom_race_delay;
                   throw std::runtime_error("test race1");
                   co_return 2;
                });
-               auto prom_race2 = MakePromise([]() -> Promise<double> { co_return 2; });
-               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+               auto prom_race2 = MakePromise([&prom_race_delay]() -> Promise<double> {
+                  co_await prom_race_delay;
+                  co_return 2;
+               });
+               auto prom_race3 = MakePromise([&prom_race_delay]() -> Promise<int> {
+                  co_await prom_race_delay;
+                  co_return 3;
+               });
 
-               co_await promise::Race(prom_race1, prom_race2, prom_race3)
-                 .Catch([](std::runtime_error const& exception) {
-                    std::cout << "race1 exception: " << exception.what() << std::endl;
-                 })
-                 .Then([](std::optional<std::variant<double, int>> const& value) {
-                    if (value.has_value()) {
-                       if (std::holds_alternative<int>(*value)) {
-                          std::cout << "race1 int " << std::get<int>(*value) << std::endl;
-                       } else {
-                          std::cout << "race1 double " << std::get<double>(*value) << std::endl;
-                       }
-                    }
-                 });
+               auto prom_race4 =
+                 promise::Race(prom_race1, prom_race2, prom_race3)
+                   .Catch([](std::runtime_error const& exception) {
+                      std::cout << "race1 exception: " << exception.what() << std::endl;
+                   })
+                   .Then([](std::optional<std::variant<double, int>> const& value) {
+                      if (value.has_value()) {
+                         if (std::holds_alternative<int>(*value)) {
+                            std::cout << "race1 int " << std::get<int>(*value) << std::endl;
+                         } else {
+                            std::cout << "race1 double " << std::get<double>(*value) << std::endl;
+                         }
+                      }
+                   });
+               (*resolve)();
 
                co_await promise::All(prom_race1, prom_race2, prom_race3)
                  .Catch([](std::runtime_error const& exception) {
