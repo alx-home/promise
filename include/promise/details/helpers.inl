@@ -161,37 +161,8 @@ Race(PROMISES&&... promise) {
 
    auto [race_promise, resolve, reject] = Create<RaceReturn>();
 
-   auto wrapper = [resolve, reject]<class PROMISE>(PROMISE&& promise) constexpr {
-      using Return = return_t<PROMISE>;
-
-      if constexpr (std::is_void_v<Return>) {
-         std::forward<PROMISE>(promise)
-           .Then([resolve = std::move(resolve)]() constexpr {
-              if constexpr (IS_VOID) {
-                 (*resolve)();
-              } else {
-                 // Delay type deduction of the variant to avoid compile errors
-                 using Return = std::conditional_t<std::is_void_v<Return>, RaceReturn, RaceReturn>;
-                 (*resolve)(Return{std::nullopt});
-              }
-           })
-           .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
-              (*reject)(std::move(exception));
-           })
-           .Detach();
-      } else {
-         std::forward<PROMISE>(promise)
-           .Then([resolve = std::move(resolve)](Return const& result) constexpr {
-              (*resolve)(result);
-           })
-           .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
-              (*reject)(std::move(exception));
-           })
-           .Detach();
-      }
-   };
-
-   (wrapper(std::forward<PROMISES>(promise)), ...);
+   ((race_promise = std::forward<PROMISES>(promise).Race(std::move(race_promise), resolve, reject)),
+    ...);
 
    return std::move(race_promise);
 }

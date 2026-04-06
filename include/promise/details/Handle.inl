@@ -322,8 +322,9 @@ public:
                assert(std::get<std::coroutine_handle<>>(awaiter));
                std::get<std::coroutine_handle<>>(awaiter).resume();
             } else {
-               assert(std::get<std::function<void()>>(awaiter));
-               std::get<std::function<void()>>(awaiter)();
+               using AwaitFunction = typename details::Promise<T, WITH_RESOLVER>::AwaitFunction;
+               assert(std::holds_alternative<AwaitFunction>(awaiter));
+               std::get<AwaitFunction>(awaiter)();
             }
          }
       }

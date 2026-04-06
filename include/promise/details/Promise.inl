@@ -298,13 +298,10 @@ private:
     *
     * @param h Awaiting coroutine handle.
     * @param lock Active lock for thread-safe access.
-    *
-    * @return True if registered.
     */
-   bool Await(std::coroutine_handle<> h, Lock lock) {
+   void Await(std::coroutine_handle<> h, Lock lock) {
       (void)lock;
       awaiters_.emplace_back(h);
-      return true;
    }
 
    /**
@@ -313,12 +310,37 @@ private:
     * @param fun Awaiting function.
     * @param lock Active lock for thread-safe access.
     *
-    * @return True if registered.
+    * @return ID of the registered function.
     */
-   bool Await(std::function<void()> fun, Lock lock) {
+   std::size_t Await(std::function<void()> fun, Lock lock) {
       (void)lock;
-      awaiters_.emplace_back(fun);
-      return true;
+      auto const id = ++next_id_;
+      awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
+      return id;
+   }
+
+   /**
+    * @brief Unregister an awaiting function.
+    *
+    * @param id ID of the registered function.
+    * @param lock Active lock for thread-safe access.
+    *
+    * @return True if the function was unregistered.
+    */
+   bool UnAwait(std::size_t id, Lock lock) {
+      (void)lock;
+      auto const it = std::ranges::find_if(awaiters_, [id](auto const& f) constexpr {
+         if (std::holds_alternative<AwaitFunction>(f)) {
+            return std::get<AwaitFunction>(f).id_ == id;
+         }
+         return false;
+      });
+      if (it != awaiters_.end()) {
+         awaiters_.erase(it);
+         return true;
+      }
+
+      return false;
    }
 
    /**
@@ -938,6 +960,83 @@ private:
       return self->Finally(std::forward<FUN>(func));
    }
 
+   /**
+    * @brief Chain a race continuation on an rvalue promise handle.
+    *
+    * @tparam FUN Type of the continuation function.
+    *
+    * @param race_promise Promise to race against.
+    * @param resolve Resolver for the race promise.
+    * @param reject Rejecter for the race promise.
+    *
+    * @return Chained promise.
+    */
+   template <class T2>
+   [[nodiscard]] constexpr auto Race(
+     WPromise<T2>&&                      race_promise,
+     std::shared_ptr<Resolve<T2>> const& resolve,
+     std::shared_ptr<Reject> const&      reject
+   ) & {
+      auto const handle = [this, resolve, reject](std::shared_lock<std::shared_mutex>& lock
+                          ) constexpr {
+         auto const& exception = this->GetException(lock);
+         if (exception) {
+            lock.unlock();
+            (*reject)(exception);
+         } else if constexpr (std::is_void_v<T2>) {
+            lock.unlock();
+            (*resolve)();
+         } else if constexpr (std::is_void_v<decltype(this->GetValue(lock))>) {
+            lock.unlock();
+            (*resolve)(std::nullopt);
+         } else {
+            auto const& value = this->GetValue(lock);
+            lock.unlock();
+
+            (*resolve)(value);
+         }
+      };
+      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+         handle(lock);
+         return std::move(race_promise);
+      } else {
+         auto const id = Await(
+           [this, handle = std::move(handle)]() mutable {
+              std::shared_lock lock{this->mutex_};
+              handle(lock);
+           },
+           lock
+         );
+
+         return std::move(race_promise).Finally([this, id]() constexpr {
+            this->UnAwait(id, this->lock_);
+         });
+      }
+   }
+   /**
+    * @brief Chain a race continuation on an rvalue promise handle.
+    *
+    * @tparam FUN Type of the continuation function.
+    *
+    * @param self Owning shared pointer to promise details.
+    * @param race_promise Promise to race against.
+    * @param resolve Resolver for the race promise.
+    * @param reject Rejecter for the race promise.
+    *
+    * @return Chained promise.
+    */
+   template <class T2>
+   [[nodiscard]] constexpr auto Race(
+     std::shared_ptr<Promise>&&          self,
+     WPromise<T2>&&                      race_promise,
+     std::shared_ptr<Resolve<T2>> const& resolve,
+     std::shared_ptr<Reject> const&      reject
+   ) && {
+      assert(self);
+      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      return self->Race(std::move(race_promise), resolve, reject);
+   }
+
 public:
    /**
     * @brief Create a resolved promise without starting a coroutine.
@@ -1095,7 +1194,11 @@ public:
    }
 
 private:
-   using Awaiter = std::variant<std::coroutine_handle<>, std::function<void()>>;
+   std::atomic<std::size_t> next_id_{0};
+   struct AwaitFunction : std::function<void()> {
+      std::size_t id_{0};
+   };
+   using Awaiter = std::variant<std::coroutine_handle<>, AwaitFunction>;
 
    std::unique_ptr<Function> function_{nullptr};
    std::vector<Awaiter>      awaiters_{};

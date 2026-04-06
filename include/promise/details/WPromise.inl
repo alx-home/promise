@@ -303,6 +303,42 @@ public:
       );
    }
 
+   template <class T2, class SELF>
+   [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
+   /**
+    * @brief Chain a continuation that runs regardless of outcome.
+    *
+    * @tparam FUN Type of the continuation function.
+    *
+    * @param func Continuation to invoke after resolve or reject.
+    *
+    * @return Chained promise.
+    * @note Best practice: store the returned promise or call Detach().
+    */
+   Race(
+     this SELF&&                         self,
+     WPromise<T2>&&                      race_promise,
+     std::shared_ptr<Resolve<T2>> const& resolve,
+     std::shared_ptr<Reject> const&      reject
+   ) {
+      return std::visit(
+        [&](auto&& details) constexpr {
+           assert(details);
+
+           if constexpr (std::is_lvalue_reference_v<SELF>) {
+              return details->Race(std::move(race_promise), resolve, reject);
+
+           } else {
+              // Transfer ownership to next promise
+              return std::move(*details).Race(
+                std::move(details), std::move(race_promise), resolve, reject
+              );
+           }
+        },
+        self.details_
+      );
+   }
+
    template <class... ARGS>
    /**
     * @brief Create a resolved promise without starting a coroutine.
