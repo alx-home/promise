@@ -992,7 +992,7 @@ private:
          } else if constexpr (std::is_void_v<T2>) {
             lock.unlock();
             (*resolve)();
-         } else if constexpr (std::is_void_v<decltype(this->GetValue(lock))>) {
+         } else if constexpr (IS_VOID) {
             lock.unlock();
             (*resolve)(std::nullopt);
          } else {

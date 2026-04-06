@@ -152,9 +152,17 @@ Race(PROMISES&&... promise) {
          static_assert(std::variant_size_v<RaceReturn1> != 0, "Race cannot have zero promises !");
 
          if constexpr (HAS_VOID) {
-            return (std::optional<RaceReturn1>*)nullptr;
+            if constexpr (std::variant_size_v<RaceReturn1> == 1) {
+               return (std::optional<std::variant_alternative_t<0, RaceReturn1>>*)nullptr;
+            } else {
+               return (std::optional<RaceReturn1>*)nullptr;
+            }
          } else {
-            return (RaceReturn1*)nullptr;
+            if constexpr (std::variant_size_v<RaceReturn1> == 1) {
+               return (std::variant_alternative_t<0, RaceReturn1>*)nullptr;
+            } else {
+               return (RaceReturn1*)nullptr;
+            }
          }
       }
    }())>>;
