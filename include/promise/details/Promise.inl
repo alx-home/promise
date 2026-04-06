@@ -486,8 +486,6 @@ private:
 
          return std::move(promise);
       } else {
-         lock.unlock();
-
          // Function return type
          using T2 = return_t<FUN>;
 
@@ -714,8 +712,6 @@ private:
                (*resolve)(apply_value(lock));
             }
          } else {
-            lock.unlock();
-
             Await(
               [this,
                resolve         = std::move(resolve),
@@ -887,8 +883,6 @@ private:
             apply_value(std::move(resolve), reject, std::forward<FUN>(func), value);
          }
       } else {
-         lock.unlock();
-
          Await(
            [this,
             resolve         = std::move(resolve),
