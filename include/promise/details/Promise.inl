@@ -977,6 +977,12 @@ private:
      std::shared_ptr<Resolve<T2>> const& resolve,
      std::shared_ptr<Reject> const&      reject
    ) & {
+      if (race_promise.Done()) {
+         // If the race promise is already done, we can skip registering a continuation and just
+         // return it directly
+         return std::move(race_promise);
+      }
+
       auto const handle = [this, resolve, reject](std::shared_lock<std::shared_mutex>& lock
                           ) constexpr {
          auto const& exception = this->GetException(lock);
