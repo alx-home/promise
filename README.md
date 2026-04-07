@@ -45,6 +45,11 @@ owning, awaitable handle you can store, pass around, or convert to type-erased p
 `ToPointer()` when you need to keep promises in containers or interfaces. `VPromise` uses `V` for
 Virtual (type-erased base class), and `WPromise` uses `W` for Wrapped (owning handle).
 
+Important: `WPromise<T>` is RAII-owning. If a live, non-detached promise reaches its destructor
+before it is done, the destructor waits for completion. This helps prevent unfinished async work
+from being dropped silently, but it also means true fire-and-forget flows should call `Detach()`
+explicitly.
+
 If a function returns a promise handle (not a coroutine), use `WPromise<T>`.
 There is no way in C++ to distinguish a function returning a promise from a coroutine promise
 type in the signature alone, so `Promise<T>` is reserved for coroutine return types.
@@ -536,6 +541,8 @@ Warnings:
 
 `Detach()` transfers ownership and lets a promise run without keeping a handle to it. Use it for
 fire-and-forget chains when you do not need to await or inspect the result.
+
+Without `Detach()`, destroying an unfinished `WPromise` waits for the promise chain to complete.
 
 ```cpp
 #include <promise/promise.h>
