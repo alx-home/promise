@@ -176,7 +176,7 @@ Example: safe value capture from a local scope
 ```cpp
 #include <promise/promise.h>
 
-Promise<std::string> MakeGreeting() {
+WPromise<std::string> MakeGreeting() {
 	std::string name = "Alex";
 	return MakePromise([=]() -> Promise<std::string> {
 		co_return "Hello, " + name;
@@ -192,7 +192,7 @@ Example: move-only capture kept alive through the chain
 #include <memory>
 #include <promise/promise.h>
 
-Promise<int> UseResource() {
+WPromise<int> UseResource() {
 	auto resource = std::make_unique<int>(7);
 	return MakePromise([res = std::move(resource)]() mutable -> Promise<int> {
 		co_return *res + 1;
