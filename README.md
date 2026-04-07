@@ -14,7 +14,10 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - C++20 coroutine promise type with `co_await` support.
 - Chaining: `Then`, `Catch`, `Finally`.
 - Resolver promises: `Promise<T, true>` plus `Resolve<T>` and `Reject`.
-- Helpers: `promise::All(...)` and `promise::Create<T>()`.
+- Helpers: `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()`.
+- Works with both coroutine and non-coroutine callables passed to `MakePromise`.
+- `CVPromise` helper for condition-variable-style async notification.
+- State inspection via `Done()`, `Resolved()`, `Rejected()`, `Value()`, and `Exception()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
 - Public handle types: `Promise<T>` (coroutine return), `WPromise<T>` (owning handle), and `VPromise` for type-erased pointers.
 - Lambdas are stored in the promise, so captures survive until resolution.
@@ -98,6 +101,11 @@ resolve->operator()(7);
 auto all = promise::All(
 	MakePromise([]() -> Promise<int> { co_return 1; }),
 	MakePromise([]() -> Promise<int> { co_return 2; })
+);
+
+auto raced = promise::Race(
+	MakePromise([]() -> Promise<int> { co_return 1; }),
+	MakePromise([]() -> Promise<double> { co_return 2.5; })
 );
 
 auto prom = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
@@ -307,6 +315,61 @@ auto value = co_await prom;
 If you do not need to await the promise but want it to stay alive until resolved, call
 `Detach()` on the promise handle before it goes out of scope.
 
+## `promise::All` and `promise::Race`
+
+Use `promise::All(...)` to await every promise and collect all results in a tuple. Use
+`promise::Race(...)` to complete as soon as the first promise resolves or rejects.
+
+```cpp
+#include <promise/promise.h>
+#include <variant>
+
+auto first = promise::Race(
+	MakePromise([]() -> Promise<int> { co_return 1; }),
+	MakePromise([]() -> Promise<double> { co_return 2.5; })
+);
+
+auto value = co_await first; // std::variant<int, double>
+```
+
+Return-type rules for `Race`:
+
+- If all raced promises return the same non-void type, `co_await` yields that type.
+- If raced promises return different non-void types, `co_await` yields `std::variant<...>`.
+- If any raced promise returns `void`, the result becomes `std::optional<...>` (or `void` if all
+  are `void`).
+- If the first completed promise rejects, the race rejects and can be handled with `Catch`.
+
+## `CVPromise` for async notification
+
+`CVPromise` is a small condition-variable-style helper for coroutines. Include it with
+`#include <promise/CVPromise.h>` when you want one or more coroutines to wait for a signal.
+
+```cpp
+#include <promise/CVPromise.h>
+
+CVPromise ready;
+
+auto waiter = MakePromise([&]() -> Promise<void> {
+	try {
+		co_await ready.Wait();
+	} catch (const CVPromise::End&) {
+		// The notifier was destroyed or rejected.
+	}
+	co_return;
+});
+
+ready.Notify(); // resolves the current waiters
+ready.Reset();  // resolves current waiters and arms the next wait
+```
+
+Notes:
+
+- `Wait()` returns a `WPromise<void>` and `CVPromise` can also be used directly in `co_await`.
+- `Notify()` resolves the current wait state.
+- `Reset()` resolves the current waiters and creates a fresh wait state for the next cycle.
+- Destroying a `CVPromise` rejects outstanding waiters with `CVPromise::End`.
+
 ## Finally usage
 
 Use `Finally` to run cleanup regardless of resolve or reject. The handler does not receive a value
@@ -436,11 +499,13 @@ auto chain = MakePromise([]() -> Promise<int> { co_return 2; })
 (void)co_await chain; // co_await type follows the same rules
 ```
 
-## Done, Value, Exception
+## Done, Resolved, Rejected, Value, Exception
 
 These methods let you inspect a promise state without awaiting it:
 
 - `Done()` returns `true` when the promise is resolved or rejected.
+- `Resolved()` returns `true` when the promise completed successfully.
+- `Rejected()` returns `true` when the promise completed with an exception.
 - `Value()` returns the resolved value (only valid when resolved).
 - `Exception()` returns the stored exception (only meaningful when rejected).
 
@@ -450,8 +515,13 @@ These methods let you inspect a promise state without awaiting it:
 auto prom = MakePromise([]() -> Promise<int> { co_return 10; });
 
 if (prom.Done()) {
-	auto value = prom.Value();
-	(void)value;
+	if (prom.Resolved()) {
+		auto value = prom.Value();
+		(void)value;
+	} else if (prom.Rejected()) {
+		auto exception = prom.Exception();
+		(void)exception;
+	}
 }
 ```
 
