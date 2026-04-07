@@ -32,8 +32,8 @@ CVPromise::~CVPromise() {
    Reject<End>();
 }
 
-CVPromise::operator WPromise<void>() const { return promise_; }
-WPromise<void>
+CVPromise::operator WPromise<void> const&() const { return promise_; }
+WPromise<void> const&
 CVPromise::Wait() const {
    return promise_;
 }
