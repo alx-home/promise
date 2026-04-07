@@ -53,16 +53,12 @@ public:
    template <class EXCEPTION, class... ARGS>
       requires(std::is_constructible_v<EXCEPTION, ARGS && ...>)
    void Reject(ARGS&&... args) {
-      auto const [promise, reject] = [this] constexpr {
-         std::unique_lock lock{mutex_};
-         auto             reject = reject_;
-         // Reject the promise after the lock is released to avoid deadlocks in callbacks
-         // The promise is moved to the callback to ensure it is not destroyed (which could lead to
-         // deadlocks if not resolved) until the callback is invoked
-         auto promise                          = std::move(promise_);
-         std::tie(promise_, resolve_, reject_) = Promise<void>::Create();
-         return std::make_pair(std::move(promise), reject);
+      auto const reject = [this] constexpr {
+         std::shared_lock lock{mutex_};
+         assert(reject_);
+         return reject_;
       }();
+
       reject->template Apply<EXCEPTION>(std::forward<ARGS>(args)...);
    }
 
