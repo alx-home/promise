@@ -443,7 +443,7 @@ Exceptions raised by an awaited promise propagate through `co_await` and can be 
 
 Promise<int> MightFail();
 
-Promise<void> Demo() {
+auto Demo = MakePromise([] -> Promise<void> {
 	try {
 		auto value = co_await MightFail();
 		(void)value;
@@ -451,7 +451,7 @@ Promise<void> Demo() {
 		(void)ex;
 	}
 	co_return;
-}
+});
 ```
 
 Then argument rules:
