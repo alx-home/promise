@@ -60,9 +60,9 @@ type in the signature alone, so `Promise<T>` is reserved for coroutine return ty
 #include <promise/promise.h>
 #include <stdexcept>
 
-Promise<int> GetAnswer() {
+auto GetAnswer = MakePromise([] -> Promise<int> {
 	co_return 42;
-}
+});
 
 // Returning a promise handle (not a coroutine) uses WPromise<T>.
 WPromise<int> FetchCachedOrAsync(bool use_cache) {
@@ -73,7 +73,7 @@ WPromise<int> FetchCachedOrAsync(bool use_cache) {
 	return MakePromise([]() -> Promise<int> { co_return 42; });
 }
 
-Promise<void> Demo() {
+auto Demo = MakePromise([]() -> Promise<void> {
    auto result = co_await GetAnswer();
 
    auto chained = MakePromise([=]() -> Promise<int> {
@@ -91,7 +91,7 @@ Promise<void> Demo() {
                      // value is std::optional<int> because Catch returned void
                      co_return value.value_or(-1);
                   });
-}
+});
 ```
 
 ## Quick Card
