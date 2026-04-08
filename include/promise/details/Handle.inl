@@ -339,10 +339,11 @@ public:
     */
    details::Promise<T, WITH_RESOLVER>& Detach(
      std::shared_ptr<details::Promise<T, WITH_RESOLVER>>&& self
-   ) {
+   ) && {
       assert(self);
       std::unique_lock lock{self->mutex_};
-      assert(!self->self_owned_);
+      // assert(!self->self_owned_); @TODO implement a refcount to detach only when no more
+      // references to the promise details exist
 
       if (!IsDone(lock)) {
          auto& result       = *self;

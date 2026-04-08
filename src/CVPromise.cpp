@@ -25,17 +25,20 @@ SOFTWARE.
 #include "CVPromise.h"
 
 CVPromise::CVPromise()
-   : CVPromise(Promise<void>::Create()) {}
+   : CVPromise([] constexpr {
+      auto [promise, resolve, reject] = Promise<void>::Create();
+      return std::make_tuple(std::make_unique<WPromise<void>>(std::move(promise)), resolve, reject);
+   }()) {}
 
 CVPromise::~CVPromise() {
    // Reject the promise on destruction to unblock any waiting coroutines
    Reject<End>();
 }
 
-CVPromise::operator WPromise<void> const&() const { return promise_; }
-WPromise<void> const&
+CVPromise::operator WPromise<void> const&() const { return *promise_; }
+WPromise<void>
 CVPromise::Wait() const {
-   return promise_;
+   return *promise_;
 }
 
 void
@@ -56,15 +59,18 @@ CVPromise::Reset() {
       // Resolve the promise after the lock is released to avoid deadlocks in callbacks
       // The promise is moved to the callback to ensure it is not destroyed (which could lead to
       // deadlocks if not resolved) until the callback is invoked
-      auto promise                          = std::move(promise_);
-      std::tie(promise_, resolve_, reject_) = Promise<void>::Create();
-      return std::make_pair(std::move(promise), resolve);
+      auto promise                                = std::move(*promise_);
+      auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
+      promise_ = std::make_unique<WPromise<void>>(std::move(new_promise));
+      resolve_ = std::move(new_resolve);
+      reject_  = std::move(new_reject);
+      return std::make_pair(std::move(promise), std::move(resolve));
    }();
    (*resolve)();
 }
 
 CVPromise::CVPromise(std::tuple<
-                     WPromise<void>,
+                     std::unique_ptr<WPromise<void>>,
                      std::shared_ptr<promise::Resolve<void>>,
                      std::shared_ptr<promise::Reject>>&& cv)
    : promise_(std::move(std::get<0>(cv)))

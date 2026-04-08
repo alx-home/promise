@@ -45,7 +45,7 @@ public:
    virtual ~CVPromise();
 
    explicit(false) operator WPromise<void> const&() const;
-   WPromise<void> const& Wait() const;
+   WPromise<void> Wait() const;
 
    void Notify();
    void Reset();
@@ -64,12 +64,12 @@ public:
 
 private:
    CVPromise(std::tuple<
-             WPromise<void>,
+             std::unique_ptr<WPromise<void>>,
              std::shared_ptr<promise::Resolve<void>>,
              std::shared_ptr<promise::Reject>>&& cv);
 
    mutable std::shared_mutex               mutex_;
-   WPromise<void>                          promise_;
+   std::unique_ptr<WPromise<void>>         promise_;
    std::shared_ptr<promise::Resolve<void>> resolve_;
    std::shared_ptr<promise::Reject>        reject_;
 };

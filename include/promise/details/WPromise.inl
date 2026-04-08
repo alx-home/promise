@@ -394,7 +394,7 @@ public:
         [&](auto&& details) constexpr {
            assert(details);
            auto& details_ref = *details;
-           details_ref.Detach(std::move(details));
+           std::move(details_ref).Detach(std::move(details));
         },
         details_
       );
@@ -562,7 +562,7 @@ public:
 
       assert(details_ptr);
       auto& details = *details_ptr;
-      return details.Detach(std::move(details_ptr));
+      return std::move(details).Detach(std::move(details_ptr));
    }
 
    /**

@@ -574,7 +574,7 @@ private:
    [[nodiscard]] constexpr auto
    Then(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
-      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      ScopeExit _{[&]() { std::move(*this).Detach(std::move(self)); }};
       return self->Then(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
@@ -810,7 +810,7 @@ private:
    [[nodiscard]] constexpr auto
    Catch(std::shared_ptr<Promise>&& self, FUN&& func, ARGS&&... args) && {
       assert(self);
-      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      ScopeExit _{[&]() { std::move(*this).Detach(std::move(self)); }};
       return self->Catch(std::forward<FUN>(func), std::forward<ARGS>(args)...);
    }
 
@@ -956,7 +956,7 @@ private:
    template <class FUN>
    [[nodiscard]] constexpr auto Finally(std::shared_ptr<Promise>&& self, FUN&& func) && {
       assert(self);
-      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      ScopeExit _{[&]() { std::move(*this).Detach(std::move(self)); }};
       return self->Finally(std::forward<FUN>(func));
    }
 
@@ -1039,7 +1039,7 @@ private:
      std::shared_ptr<Reject> const&      reject
    ) && {
       assert(self);
-      ScopeExit _{[&]() { this->Detach(std::move(self)); }};
+      ScopeExit _{[&]() { std::move(*this).Detach(std::move(self)); }};
       return self->Race(std::move(race_promise), resolve, reject);
    }
 
