@@ -39,7 +39,7 @@ CVPromise::Wait() const {
 }
 
 void
-CVPromise::Notify() const {
+CVPromise::Notify() {
    auto const resolve = [this] constexpr {
       std::shared_lock lock{mutex_};
       assert(resolve_);

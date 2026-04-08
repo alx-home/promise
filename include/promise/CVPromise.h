@@ -47,7 +47,7 @@ public:
    explicit(false) operator WPromise<void> const&() const;
    WPromise<void> const& Wait() const;
 
-   void Notify() const;
+   void Notify();
    void Reset();
 
    template <class EXCEPTION, class... ARGS>
