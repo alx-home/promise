@@ -16,6 +16,7 @@ win32_library(TARGET_NAME alx-home_promise
     FILES
   src/Promise.cpp
   src/CVPromise.cpp
+  src/MessageQueue.cpp
 )
 add_library(alx-home::promise ALIAS alx-home_promise)
 
