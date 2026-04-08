@@ -29,7 +29,6 @@ SOFTWARE.
 #include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <shared_mutex>
 #include <variant>
 
@@ -57,9 +56,9 @@ public:
    using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
 
    WPromise(WPromise const& other)                = default;
-   WPromise& operator=(WPromise const& other)     = default;
+   WPromise& operator=(WPromise const& other)     = delete;
    WPromise(WPromise&& other) noexcept            = default;
-   WPromise& operator=(WPromise&& other) noexcept = default;
+   WPromise& operator=(WPromise&& other) noexcept = delete;
 
    ~WPromise() {
       std::visit(

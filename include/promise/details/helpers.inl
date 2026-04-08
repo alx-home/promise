@@ -168,11 +168,14 @@ Race(PROMISES&&... promise) {
    }())>>;
 
    auto [race_promise, resolve, reject] = Create<RaceReturn>();
+   auto result = std::make_unique<promise::details::WPromise<RaceReturn>>(std::move(race_promise));
 
-   ((race_promise = std::forward<PROMISES>(promise).Race(std::move(race_promise), resolve, reject)),
+   ((result = std::make_unique<promise::details::WPromise<RaceReturn>>(
+       std::forward<PROMISES>(promise).Race(std::move(*result), resolve, reject)
+     )),
     ...);
 
-   return std::move(race_promise);
+   return std::move(*result);
 }
 
 }  // namespace promise
