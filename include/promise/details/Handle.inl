@@ -188,9 +188,9 @@ protected:
             parent->handle_ = nullptr;
 
             if constexpr (WITH_RESOLVER) {
-               assert(!delayed_return_ && "Resolver promises must not return values");
                if (parent->IsDone(lock)) {
                   parent->OnResolved(lock);
+                  return {};
                }
             }
          }
