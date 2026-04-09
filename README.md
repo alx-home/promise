@@ -357,7 +357,7 @@ CVPromise ready;
 
 auto waiter = MakePromise([&]() -> Promise<void> {
 	try {
-		co_await ready.Wait();
+		co_await *ready;
 	} catch (const CVPromise::End&) {
 		// The notifier was destroyed or rejected.
 	}
