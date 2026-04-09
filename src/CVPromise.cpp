@@ -35,13 +35,13 @@ CVPromise::~CVPromise() {
    Reject<End>();
 }
 
-CVPromise::operator WPromise<void> const&() const { return *promise_; }
+CVPromise::operator WPromise<void>() const { return *promise_; }
 WPromise<void>
 CVPromise::Wait() const {
    return *promise_;
 }
 
-WPromise<void> const&
+WPromise<void>
 CVPromise::operator*() const {
    return *promise_;
 }

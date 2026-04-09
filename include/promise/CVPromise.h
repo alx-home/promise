@@ -44,9 +44,9 @@ public:
 
    virtual ~CVPromise();
 
-   operator WPromise<void> const&() const;
-   WPromise<void>        Wait() const;
-   WPromise<void> const& operator*() const;
+   operator WPromise<void>() const;
+   WPromise<void> Wait() const;
+   WPromise<void> operator*() const;
 
    void Notify();
    void Reset();
