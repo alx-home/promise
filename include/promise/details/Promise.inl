@@ -359,30 +359,6 @@ private:
    }
 
    /**
-    * @brief Forward return values to the resolver.
-    *
-    * @tparam FROM Types of values to resolve with.
-    *
-    * @param value Values to resolve with.
-    */
-   template <class... FROM>
-      requires(
-        (std::is_convertible_v<FROM, T> && ...)
-        && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
-      )
-   void ReturnImpl(FROM&&... value) {
-      assert(this->resolver_);
-
-      if constexpr (!WITH_RESOLVER) {
-         if constexpr (IS_VOID) {
-            this->resolver_->Resolve();
-         } else {
-            (this->resolver_->Resolve(value), ...);
-         }
-      }
-   }
-
-   /**
     * @brief Chain a continuation to run on resolve.
     *
     * @tparam FUN Type of the continuation function.

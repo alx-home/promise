@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace promise {
 
@@ -79,7 +80,7 @@ protected:
        */
       template <class SELF>
       void return_void(this SELF&& self) {
-         self.ReturnImpl();
+         assert(!self.delayed_return_);
       }
    };
 
@@ -94,7 +95,8 @@ protected:
       template <class FROM, class SELF>
          requires(std::is_convertible_v<FROM, T>)
       void return_value(this SELF&& self, FROM&& value) {
-         self.ReturnImpl(std::forward<FROM>(value));
+         assert(!self.delayed_return_);
+         self.delayed_return_ = std::make_unique<T>(std::forward<FROM>(value));
       }
    };
 
@@ -179,16 +181,38 @@ protected:
        */
       FinalSuspend final_suspend() noexcept {
          auto const parent = this->parent_;
+         {
+            std::unique_lock lock{parent->mutex_};
+            assert(parent);
+            assert(parent->resolver_);
+            parent->handle_ = nullptr;
 
-         std::unique_lock lock{parent->mutex_};
-         assert(parent);
-         parent->handle_ = nullptr;
+            if constexpr (WITH_RESOLVER) {
+               assert(!delayed_return_ && "Resolver promises must not return values");
+               if (parent->IsDone(lock)) {
+                  parent->OnResolved(lock);
+               }
+            }
+         }
+         if (delayed_return_) {
+            auto const delayed_return = std::move(*delayed_return_);
+            delayed_return_           = std::nullopt;
 
-         if (parent->IsDone(lock)) {
-            parent->OnResolved(lock);
+            if constexpr (IS_VOID) {
+               parent->resolver_->Reject(std::move(delayed_return));
+            } else {
+               if (std::holds_alternative<std::exception_ptr>(delayed_return)) {
+                  parent->resolver_->Reject(std::get<std::exception_ptr>(delayed_return));
+               } else {
+                  assert(!WITH_RESOLVER && "Resolver promises must not return values");
+                  parent->resolver_->Resolve(std::move(*std::get<std::unique_ptr<T>>(delayed_return)
+                  ));
+               }
+            }
+         } else if constexpr (IS_VOID && !WITH_RESOLVER) {
+            parent->resolver_->Resolve();
          } else {
-            // Will be done by the resolver
-            assert(WITH_RESOLVER);
+            assert(IS_VOID && "Non-void promises must return a value or throw");
          }
 
          return {};
@@ -198,29 +222,21 @@ protected:
        * @brief Handle an unhandled exception in the coroutine.
        */
       void unhandled_exception() {
-         auto const parent = this->parent_;
+         assert(!delayed_return_);
 
-         assert(parent);
-         assert(parent->resolver_);
-         parent->resolver_->Reject(std::current_exception());
-      }
-
-      /**
-       * @brief Forward return values to the promise implementation.
-       *
-       * @param value Values to return.
-       */
-      template <class... FROM>
-         requires(
-           (std::is_convertible_v<FROM, T> && ...)
-           && (sizeof...(FROM) == ((IS_VOID || WITH_RESOLVER) ? 0 : 1))
-         )
-      void ReturnImpl(FROM&&... value) {
-         this->parent_->ReturnImpl(std::forward<FROM>(value)...);
+         delayed_return_ = std::current_exception();
       }
 
       friend Promise;
       friend Handle;
+
+   private:
+      using ReturnValue = std::conditional_t<
+        IS_VOID,
+        std::exception_ptr,
+        std::variant<std::exception_ptr, std::unique_ptr<T>>>;
+
+      std::optional<ReturnValue> delayed_return_{};
    };
 
    /**
