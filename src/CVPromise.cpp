@@ -46,6 +46,11 @@ CVPromise::operator*() const {
    return *promise_;
 }
 
+WPromise<void> const*
+CVPromise::operator->() const {
+   return promise_.get();
+}
+
 void
 CVPromise::Notify() {
    auto const resolve = [this] constexpr {
