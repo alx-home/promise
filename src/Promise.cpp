@@ -54,14 +54,9 @@ Resolve<void>::Resolve(std::shared_ptr<Resolver<void>> resolver)
 
 bool
 Resolve<void>::operator()() const {
-   if (!resolved_.exchange(true)) {
-      resolver_->Resolve();
-      return true;
-   }
-
-   return false;
+   return resolver_->Resolve();
 }
 
-Resolve<void>::operator bool() const { return resolved_; }
+Resolve<void>::operator bool() const { return resolver_->await_ready(); }
 
 }  // namespace promise

@@ -62,12 +62,7 @@ template <class T>
    requires(!std::is_void_v<T>)
 bool
 Resolve<T>::operator()(T const& value) const {
-   if (!resolved_.exchange(true)) {
-      resolver_->Resolve(value);
-      return true;
-   }
-
-   return false;
+   return resolver_->Resolve(value);
 }
 
 /**
@@ -77,7 +72,7 @@ Resolve<T>::operator()(T const& value) const {
 template <class T>
    requires(!std::is_void_v<T>)
 Resolve<T>::operator bool() const {
-   return resolved_;
+   return resolver_->await_ready();
 }
 
 template <class T>

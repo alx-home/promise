@@ -80,7 +80,6 @@ public:
 
 private:
    std::shared_ptr<Resolver<void>> resolver_;
-   mutable std::atomic<bool>       resolved_{false};
 };
 
 template <class T>
@@ -124,7 +123,6 @@ public:
 
 private:
    std::shared_ptr<Resolver<T>> resolver_;
-   mutable std::atomic<bool>    resolved_{false};
 };
 
 }  // namespace promise
