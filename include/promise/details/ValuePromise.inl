@@ -40,6 +40,10 @@ using Lock = std::variant<
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
+using UniqueLock = std::variant<
+  std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
+  std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
+
 template <class T, bool VOID_TYPE>
 /**
  * @brief Base class for promises that can hold a resolved value.

@@ -299,7 +299,7 @@ private:
     * @param h Awaiting coroutine handle.
     * @param lock Active lock for thread-safe access.
     */
-   void Await(std::coroutine_handle<> h, Lock lock) {
+   void Await(std::coroutine_handle<> h, UniqueLock lock) {
       (void)lock;
       awaiters_.emplace_back(h);
    }
@@ -312,7 +312,7 @@ private:
     *
     * @return ID of the registered function.
     */
-   std::size_t Await(std::function<void()> fun, Lock lock) {
+   std::size_t Await(std::function<void()> fun, UniqueLock lock) {
       (void)lock;
       auto const id = ++next_id_;
       awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
@@ -327,7 +327,7 @@ private:
     *
     * @return True if the function was unregistered.
     */
-   bool UnAwait(std::size_t id, Lock lock) {
+   bool UnAwait(std::size_t id, UniqueLock lock) {
       (void)lock;
       auto const it = std::ranges::find_if(awaiters_, [id](auto const& f) constexpr {
          if (std::holds_alternative<AwaitFunction>(f)) {
@@ -373,7 +373,10 @@ private:
    [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
       static_assert(!IS_WPROMISE<FUN>, "Then does not support promise wrapper!");
 
-      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+      if (std::unique_lock ulock{this->mutex_}; this->IsDone(ulock)) {
+         ulock.unlock();
+         std::shared_lock lock{this->mutex_};
+
          if constexpr (!IS_PROMISE<FUN>) {
             // Function return type
             using T2 = return_t<FUN>;
@@ -479,7 +482,7 @@ private:
                 })
                 .Detach();
            },
-           lock
+           ulock
          );
 
          return std::move(promise);
@@ -527,7 +530,7 @@ private:
                  (*reject)(std::current_exception());
               }
            },
-           lock
+           ulock
          );
 
          return std::move(promise);
@@ -681,7 +684,10 @@ private:
 
       auto [promise, resolve, reject] = promise::Create<ReturnType>();
       try {
-         if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+         if (std::unique_lock ulock{this->mutex_}; this->IsDone(ulock)) {
+            ulock.unlock();
+            std::shared_lock lock{this->mutex_};
+
             auto const& exception = this->GetException(lock);
             if (exception) {
                lock.unlock();
@@ -760,7 +766,7 @@ private:
                     (*reject)(std::current_exception());
                  }
               },
-              lock
+              ulock
             );
          }
       } catch (...) {
@@ -862,7 +868,10 @@ private:
         };
 
       auto [promise, resolve, reject] = promise::Create<T>();
-      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+      if (std::unique_lock<std::shared_mutex> ulock{this->mutex_}; this->IsDone(ulock)) {
+         ulock.unlock();
+         std::shared_lock lock{this->mutex_};
+
          auto const& exception = this->GetException(lock);
          if (exception) {
             lock.unlock();
@@ -912,7 +921,7 @@ private:
                  (*reject)(std::current_exception());
               }
            },
-           lock
+           ulock
          );
       }
 
@@ -978,7 +987,9 @@ private:
             (*resolve)(value);
          }
       };
-      if (std::shared_lock lock{this->mutex_}; this->IsDone(lock)) {
+      if (std::unique_lock ulock{this->mutex_}; this->IsDone(ulock)) {
+         ulock.unlock();
+         std::shared_lock lock{this->mutex_};
          handle(lock);
          return std::move(race_promise);
       } else {
@@ -987,7 +998,7 @@ private:
               std::shared_lock lock{this->mutex_};
               handle(lock);
            },
-           lock
+           ulock
          );
 
          return std::move(race_promise).Finally([this, id]() constexpr {
