@@ -119,7 +119,7 @@ public:
     * @brief Check if the resolver is already resolved.
     * @return True if already resolved, false otherwise.
     */
-   bool await_ready() const { return resolved_; }
+   bool await_ready() const { return resolved_.load(); }
 
    /**
     * @brief Resume the await (no value to return).

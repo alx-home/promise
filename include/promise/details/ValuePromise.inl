@@ -115,7 +115,7 @@ public:
       requires(IS_VOID)
    bool IsResolved(this SELF&& self, [[gnu::unused]] Lock lock) {
       assert(self.resolver_);
-      return self.resolver_->resolved_;
+      return self.resolver_->resolved_.load() && (self.resolver_->exception_ == nullptr);
    }
 };
 
