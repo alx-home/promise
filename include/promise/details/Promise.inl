@@ -42,17 +42,6 @@ SOFTWARE.
 #include <utility>
 #include <variant>
 
-namespace promise {
-/**
- * @brief Type-erased awaitable wrapper for promises.
- *
- * This class allows promises to be awaited without knowing their concrete type.
- */
-struct Function {
-   virtual ~Function() = default;
-};
-}  // namespace promise
-
 namespace promise::details {
 template <class T>
 class WPromise;

@@ -41,6 +41,14 @@ SOFTWARE.
 #include <variant>
 
 namespace promise {
+/**
+ * @brief Type-erased awaitable wrapper for promises.
+ *
+ * This class allows promises to be awaited without knowing their concrete type.
+ */
+struct Function {
+   virtual ~Function() = default;
+};
 
 template <class T, bool WITH_RESOLVER>
 class Handle : public ValuePromise<T> {
@@ -157,7 +165,23 @@ protected:
                   );
                }
 
-               self_.resolver_ = std::get<0>(Resolver<T>::Create());
+               auto [resolver, resolve, reject] = Resolver<T>::Create();
+               self_.resolver_                  = resolver;
+
+               assert(!self_.function_);
+               struct FunctionImpl : Function {
+                  FunctionImpl(
+                    std::shared_ptr<promise::Resolve<T>> resolve,
+                    std::shared_ptr<promise::Reject>     reject
+                  )
+                     : resolve_(std::move(resolve))
+                     , reject_(std::move(reject)) {}
+
+                  std::shared_ptr<promise::Resolve<T>> resolve_;
+                  std::shared_ptr<promise::Reject>     reject_;
+               };
+               self_.function_ =
+                 std::make_unique<FunctionImpl>(std::move(resolve), std::move(reject));
             }
 
             self_.resolver_->promise_ = &self_;
