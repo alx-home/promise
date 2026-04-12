@@ -33,7 +33,8 @@ namespace promise {
 /**
  * @brief Type-erased promise interface, useful for storing promises in pointers.
  */
-struct VPromise {
+class VPromise {
+public:
    VPromise()                               = default;
    VPromise(VPromise const&)                = default;
    VPromise(VPromise&&) noexcept            = default;

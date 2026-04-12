@@ -30,13 +30,19 @@ SOFTWARE.
 #include <algorithm>
 #include <cassert>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace promise {
+
+template <class T, bool WITH_RESOLVER>
+class Handle;
+
+template <class T>
+class ValuePromise;
 
 /**
  * @brief Construct a value resolver from an implementation callback.
@@ -44,8 +50,8 @@ namespace promise {
  */
 template <class T>
    requires(!std::is_void_v<T>)
-Resolve<T>::Resolve(std::function<void(T const&)> impl)
-   : impl_(std::move(impl)) {}
+Resolve<T>::Resolve(std::shared_ptr<Resolver<T>> resolver)
+   : resolver_(std::move(resolver)) {}
 
 /**
  * @brief Resolve the promise with a value.
@@ -57,7 +63,7 @@ template <class T>
 bool
 Resolve<T>::operator()(T const& value) const {
    if (!resolved_.exchange(true)) {
-      impl_(value);
+      resolver_->Resolve(value);
       return true;
    }
 
@@ -74,27 +80,46 @@ Resolve<T>::operator bool() const {
    return resolved_;
 }
 
-template <class T, bool WITH_RESOLVER>
-struct Resolver {
-   details::Promise<T, WITH_RESOLVER>* promise_{nullptr};
-   std::exception_ptr                  exception_{};
-   std::shared_ptr<std::atomic<bool>>  resolved_{std::make_shared<std::atomic<bool>>(false)};
-
+template <class T>
+struct ResolverValue {
    // unique_ptr to handle std::optional<std::optional>...
-   std::unique_ptr<T>          value_{};
-   std::shared_ptr<Resolve<T>> resolve_{std::make_shared<promise::Resolve<T>>(
-     [this, resolved = resolved_](T const& value) mutable { this->Resolve(value, *resolved); }
-   )};
-   std::shared_ptr<Reject>     reject_{
-     std::make_shared<promise::Reject>([this, resolved = resolved_](std::exception_ptr exc
-                                       ) mutable { this->Reject(std::move(exc), *resolved); })
-   };
+   std::unique_ptr<T> value_{};
+};
+
+template <>
+struct ResolverValue<void> {};
+
+template <class T>
+class Resolver
+   : public std::enable_shared_from_this<Resolver<T>>
+   , private ResolverValue<T> {
+public:
+   using Promise = std::variant<details::Promise<T, true>*, details::Promise<T, false>*>;
+
+private:
+   Resolver() = default;
+
+public:
+   virtual ~Resolver() = default;
+
+   static constexpr auto Create() {
+      struct MakeSharedEnabler : public Resolver<T> {
+      public:
+         using Resolver<T>::Resolver;
+      };
+
+      auto resolver = std::make_shared<MakeSharedEnabler>();
+      auto resolve  = std::make_shared<promise::Resolve<T>>(resolver);
+      auto reject   = std::make_shared<promise::Reject>([resolver](std::exception_ptr exception
+                                                      ) constexpr { resolver->Reject(exception); });
+      return std::make_tuple(std::move(resolver), std::move(resolve), std::move(reject));
+   }
 
    /**
     * @brief Check if the resolver is already resolved.
-    * @return True if already resolved.
+    * @return True if already resolved, false otherwise.
     */
-   bool await_ready() const { return *resolved_; }
+   bool await_ready() const { return resolved_; }
 
    /**
     * @brief Resume the await (no value to return).
@@ -107,42 +132,50 @@ struct Resolver {
     * @return True if this call resolved the promise, false if it was already resolved.
     */
    template <class TT>
-      requires(std::is_convertible_v<TT, T>)
+      requires(!std::is_void_v<T> && std::is_convertible_v<TT, T>)
    bool Resolve(TT&& value) {
-      return Resolve(value, *this->resolved_);
+      return std::visit(
+        [&](auto&& promise) {
+           if (!resolved_.exchange(true)) {
+              std::unique_lock lock{promise->mutex_};
+
+              assert(!ResolverValue<T>::value_);
+              assert(!exception_);
+              ResolverValue<T>::value_ = std::make_unique<T>(std::forward<TT>(value));
+
+              assert(promise);
+              promise->OnResolved(lock);
+              return true;
+           }
+
+           return false;
+        },
+        promise_
+      );
    }
 
    /**
-    * @brief Resolve the promise with a value and a shared resolved flag.
-    * @param value Value to resolve with.
-    * @param resolved Shared resolved flag.
+    * @brief Resolve the promise with a value.
     * @return True if this call resolved the promise, false if it was already resolved.
     */
-   template <class TT>
-      requires(std::is_convertible_v<TT, T>)
-   bool Resolve(TT&& value, std::atomic<bool>& resolved) {
-      if (!resolved.exchange(true)) {
-         std::unique_lock lock{promise_->mutex_};
+   template <class...>
+      requires(std::is_void_v<T>)
+   bool Resolve() {
+      return std::visit(
+        [&](auto&& promise) {
+           if (!resolved_.exchange(true)) {
+              std::unique_lock lock{promise->mutex_};
 
-         assert(!value_);
-         assert(!exception_);
-         value_ = std::make_unique<T>(std::forward<TT>(value));
+              assert(!exception_);
+              assert(promise);
+              promise->OnResolved(lock);
+              return true;
+           }
 
-         assert(promise_);
-         promise_->OnResolved(lock);
-         return true;
-      }
-
-      return false;
-   }
-
-   /**
-    * @brief Reject the promise with an exception.
-    * @param exception Exception to store.
-    * @return True if this call rejected the promise, false if it was already rejected.
-    */
-   bool Reject(std::exception_ptr exception) {
-      return Reject(std::move(exception), *this->resolved_);
+           return false;
+        },
+        promise_
+      );
    }
 
    /**
@@ -153,107 +186,47 @@ struct Resolver {
     */
    template <class EXCEPTION, class... ARGS>
    bool Reject(ARGS&&... args) {
-      return Reject(
-        std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)), *this->resolved_
+      return Reject(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
+   }
+
+   /**
+    * @brief Reject the promise with an exception and a shared resolved flag.
+    * @param exception Exception to store.
+    * @return True if this call rejected the promise, false if it was already rejected.
+    */
+   bool Reject(std::exception_ptr exception) {
+      return std::visit(
+        [&](auto&& promise) {
+           if (!resolved_.exchange(true)) {
+              std::unique_lock lock{promise->mutex_};
+
+              if constexpr (!std::is_void_v<T>) {
+                 assert(!ResolverValue<T>::value_);
+              }
+              assert(!exception_);
+              exception_ = std::move(exception);
+
+              assert(promise);
+              promise->OnResolved(lock);
+              return true;
+           }
+
+           return false;
+        },
+        promise_
       );
    }
 
-   /**
-    * @brief Reject the promise with an exception and a shared resolved flag.
-    * @param exception Exception to store.
-    * @param resolved Shared resolved flag.
-    * @return True if this call rejected the promise, false if it was already rejected.
-    */
-   bool Reject(std::exception_ptr exception, std::atomic<bool>& resolved) {
-      if (!resolved.exchange(true)) {
-         std::unique_lock lock{promise_->mutex_};
+private:
+   Promise            promise_{static_cast<details::Promise<T, false>*>(nullptr)};
+   std::exception_ptr exception_{};
+   std::atomic<bool>  resolved_{false};
 
-         assert(!value_);
-         assert(!exception_);
-         exception_ = std::move(exception);
-
-         assert(promise_);
-         promise_->OnResolved(lock);
-         return true;
-      }
-
-      return false;
-   }
-};
-
-template <bool WITH_RESOLVER>
-struct Resolver<void, WITH_RESOLVER> {
-   details::Promise<void, WITH_RESOLVER>* promise_{nullptr};
-
-   std::shared_ptr<std::atomic<bool>> resolved_{std::make_shared<std::atomic<bool>>(false)};
-   std::exception_ptr                 exception_{};
-   std::shared_ptr<Resolve<void>>     resolve_{std::make_shared<promise::Resolve<void>>(
-     [this, resolved = resolved_]() mutable { this->Resolve(*resolved); }
-   )};
-   std::shared_ptr<Reject>            reject_{std::make_shared<promise::Reject>(
-     [this, resolved = resolved_](std::exception_ptr exc) mutable { this->Reject(exc, *resolved); }
-   )};
-
-   /**
-    * @brief Check if the resolver is already resolved.
-    * @return True if already resolved.
-    */
-   bool await_ready() const { return *resolved_; }
-
-   /**
-    * @brief Resume the await (no value to return).
-    */
-   void await_resume() const {}
-
-   /**
-    * @brief Resolve the promise.
-    * @return True if this call resolved the promise, false if it was already resolved.
-    */
-   bool Resolve() { return Resolve(*resolved_); }
-   /**
-    * @brief Resolve the promise with a shared resolved flag.
-    * @param resolved Shared resolved flag.
-    * @return True if this call resolved the promise, false if it was already resolved.
-    */
-   bool Resolve(std::atomic<bool>& resolved) {
-      if (!resolved.exchange(true)) {
-         std::unique_lock lock{promise_->mutex_};
-
-         assert(!exception_);
-         assert(promise_);
-         promise_->OnResolved(lock);
-         return true;
-      }
-
-      return false;
-   }
-
-   /**
-    * @brief Reject the promise with an exception.
-    * @param exception Exception to store.
-    * @return True if this call rejected the promise, false if it was already rejected.
-    */
-   bool Reject(std::exception_ptr exception) { return Reject(std::move(exception), *resolved_); }
-   /**
-    * @brief Reject the promise with an exception and a shared resolved flag.
-    * @param exception Exception to store.
-    * @param resolved Shared resolved flag.
-    * @return True if this call rejected the promise, false if it was already rejected.
-    */
-   bool Reject(std::exception_ptr exception, std::atomic<bool>& resolved) {
-      if (!resolved.exchange(true)) {
-         std::unique_lock lock{promise_->mutex_};
-
-         assert(!exception_);
-         exception_ = std::move(exception);
-
-         assert(promise_);
-         promise_->OnResolved(lock);
-         return true;
-      }
-
-      return false;
-   }
+   friend class details::Promise<T, true>;
+   friend class promise::Handle<T, true>;
+   friend class details::Promise<T, false>;
+   friend class promise::Handle<T, false>;
+   friend class promise::ValuePromise<T>;
 };
 
 }  // namespace promise

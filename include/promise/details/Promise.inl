@@ -93,7 +93,7 @@ public:
 
 protected:
    friend class details::IPromise<T, WITH_RESOLVER>;
-   friend details::IPromise<T, WITH_RESOLVER>::Parent;
+   friend class details::WPromise<T>;
 
    using ValuePromise = Handle<T, WITH_RESOLVER>::ValuePromise;
    using handle_type  = Handle<T, WITH_RESOLVER>::handle_type;
@@ -209,7 +209,7 @@ private:
     *
     * @return Coroutine handle result.
     */
-   auto operator()(std::unique_ptr<Resolver<T, WITH_RESOLVER>>&& resolver) {
+   auto operator()(std::unique_ptr<Resolver<T>>&& resolver) {
       assert(!this->resolver_);
       this->resolver_ = std::move(resolver);
 
@@ -1044,9 +1044,7 @@ public:
       if constexpr (WITH_RESOLVER) {
          details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
 
-         auto resolver = std::make_unique<promise::Resolver<T, WITH_RESOLVER>>();
-         auto resolve  = resolver->resolve_;
-         auto reject   = resolver->reject_;
+         auto [resolver, resolve, reject] = promise::Resolver<T>::Create();
 
          auto const details =
            std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
@@ -1141,27 +1139,29 @@ public:
          explicit FunctionImpl(std::remove_cvref_t<FUN> const& value)
             : func_(value) {}
 
-         std::remove_cvref_t<FUN> func_;
+         std::remove_cvref_t<FUN>             func_;
+         std::shared_ptr<promise::Resolve<T>> resolve_;
+         std::shared_ptr<promise::Reject>     reject_;
       };
-      auto holder   = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
-      auto resolver = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+      auto holder                      = std::make_unique<FunctionImpl>(std::forward<FUN>(func));
+      auto [resolver, resolve, reject] = promise::Resolver<T>::Create();
 
-      auto& resolve = *resolver->resolve_;
-      auto& reject  = *resolver->reject_;
+      holder->resolve_ = resolve;
+      holder->reject_  = reject;
 
       auto promise = [&]() constexpr {
          if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
             if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
                           && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>) {
-               return holder->func_(resolve, reject, std::forward<ARGS>(args)...);
+               return holder->func_(*resolve, *reject, std::forward<ARGS>(args)...);
             } else if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
-               return holder->func_(resolve, std::forward<ARGS>(args)...);
+               return holder->func_(*resolve, std::forward<ARGS>(args)...);
             } else {
                return holder->func_(std::forward<ARGS>(args)...);
             }
          } else if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 1) {
             if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
-               return holder->func_(resolve, std::forward<ARGS>(args)...);
+               return holder->func_(*resolve, std::forward<ARGS>(args)...);
             } else {
                return holder->func_(std::forward<ARGS>(args)...);
             }
@@ -1180,7 +1180,9 @@ public:
       }
 
       if constexpr (RPROMISE) {
-         return std::make_tuple(WPromise<T>{std::move(promise)}, &resolve, &reject);
+         return std::make_tuple(
+           WPromise<T>{std::move(promise)}, std::move(resolve), std::move(reject)
+         );
       } else {
          return WPromise<T>{std::move(promise)};
       }

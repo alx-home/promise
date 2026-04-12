@@ -29,7 +29,7 @@ SOFTWARE.
 #include <cassert>
 
 namespace promise {
-struct Reject;
+class Reject;
 }
 
 /**

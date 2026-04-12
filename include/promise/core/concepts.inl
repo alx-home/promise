@@ -120,9 +120,9 @@ template <class T>
 struct IsResolver : std::false_type {};
 
 template <class T>
-struct Resolve;
+class Resolve;
 
-struct Reject;
+class Reject;
 
 template <class T>
 struct IsResolver<promise::Resolve<T>> : std::true_type {};

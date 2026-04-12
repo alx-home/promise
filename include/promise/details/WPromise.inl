@@ -603,8 +603,7 @@ public:
     * @return This promise handle (lvalue) or detached handle (rvalue).
     * @note Best practice: keep or detach the handle immediately after starting.
     */
-   auto&&
-   operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T, WITH_RESOLVER>>&& resolver) {
+   auto&& operator()(this SELF&& self, std::unique_ptr<promise::Resolver<T>>&& resolver) {
       using Promise = std::shared_ptr<promise::details::Promise<T, WITH_RESOLVER>>;
       assert(std::holds_alternative<Promise>(self.details_));
       (*std::get<Promise>(self.details_))(std::move(resolver));

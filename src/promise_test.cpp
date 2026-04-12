@@ -70,14 +70,14 @@ main() {
          }
 
          try {
-            Resolve<int> const* resolver{};
-            Reject const*       rejecter{};
+            std::shared_ptr<Resolve<int> const> resolver{};
+            std::shared_ptr<Reject const>       rejecter{};
 
             auto prom{MakePromise(
               [&resolver,
                &rejecter](Resolve<int> const& resolve, Reject const& reject) -> Promise<int, true> {
-                 resolver = &resolve;
-                 rejecter = &reject;
+                 resolver = resolve.shared_from_this();
+                 rejecter = reject.shared_from_this();
                  //   MakeReject<std::runtime_error>(*rejecter, "tutu");
                  co_return;
               }
@@ -118,12 +118,12 @@ main() {
 
             auto [prom_Create, resolve, reject] = promise::Create<int>();
 
-            auto prom_Create_wait{MakePromise([&prom_Create]() -> Promise<int> {
+            auto prom_create_wait{MakePromise([&prom_Create]() -> Promise<int> {
                co_return co_await prom_Create;
             })};
             (*resolve)(888);
 
-            std::cout << "Create " << co_await prom_Create_wait << std::endl;
+            std::cout << "Create " << co_await prom_create_wait << std::endl;
 
             auto prom_int{
               prom2

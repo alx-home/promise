@@ -34,7 +34,8 @@ namespace promise {
 /**
  * @brief Rejector handle used to reject a promise with an exception.
  */
-struct Reject : std::enable_shared_from_this<Reject> {
+class Reject : public std::enable_shared_from_this<Reject> {
+public:
    /**
     * @brief Construct a rejector from an implementation callback.
     *

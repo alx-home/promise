@@ -43,12 +43,12 @@ SOFTWARE.
 namespace promise {
 
 template <class T, bool WITH_RESOLVER>
-struct Handle : public ValuePromise<T, std::is_void_v<T>> {
+class Handle : public ValuePromise<T> {
 protected:
    struct PromiseType;
    using handle_type  = std::coroutine_handle<PromiseType>;
    using Promise      = details::IPromise<T, WITH_RESOLVER>;
-   using ValuePromise = ValuePromise<T, std::is_void_v<T>>;
+   using ValuePromise = ValuePromise<T>;
    using Locker       = std::unique_lock<std::shared_mutex>;
    /**
     * @brief Unlock helper for lock guards.
@@ -157,7 +157,7 @@ protected:
                   );
                }
 
-               self_.resolver_ = std::make_unique<Resolver<T, WITH_RESOLVER>>();
+               self_.resolver_ = std::get<0>(Resolver<T>::Create());
             }
 
             self_.resolver_->promise_ = &self_;
@@ -185,7 +185,8 @@ protected:
             std::unique_lock lock{parent->mutex_};
             assert(parent);
             assert(parent->resolver_);
-            parent->handle_ = nullptr;
+            parent->handle_   = nullptr;
+            parent->function_ = nullptr;
 
             if constexpr (WITH_RESOLVER) {
                if (parent->IsDone(lock)) {
@@ -399,12 +400,12 @@ protected:
 
    handle_type                                         handle_{nullptr};
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
-   std::unique_ptr<Resolver<T, WITH_RESOLVER>>         resolver_{nullptr};
+   std::shared_ptr<Resolver<T>>                        resolver_{nullptr};
 
 public:
    friend class details::IPromise<T, WITH_RESOLVER>;
    friend ValuePromise;
-   friend struct Resolver<T, WITH_RESOLVER>;
+   friend class Resolver<T>;
 };
 
 }  // namespace promise

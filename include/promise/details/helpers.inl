@@ -310,8 +310,8 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
 template <class T>
 static constexpr auto
 MakeResolver() {
-   auto resolver = std::make_unique<promise::Resolver<T, true>>();
-   return std::make_tuple(std::move(resolver), resolver->resolve_, resolver->reject_);
+   auto [resolver, resolve, reject] = promise::Resolver<T>::Create();
+   return std::make_tuple(std::move(resolver), std::move(resolve), std::move(reject));
 }
 
 namespace promise {

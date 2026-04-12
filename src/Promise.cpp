@@ -49,13 +49,13 @@ Reject::operator()(std::exception_ptr exception) const {
 
 Reject::operator bool() const { return rejected_; }
 
-Resolve<void>::Resolve(std::function<void()> impl)
-   : impl_(std::move(impl)) {}
+Resolve<void>::Resolve(std::shared_ptr<Resolver<void>> resolver)
+   : resolver_(std::move(resolver)) {}
 
 bool
 Resolve<void>::operator()() const {
    if (!resolved_.exchange(true)) {
-      impl_();
+      resolver_->Resolve();
       return true;
    }
 

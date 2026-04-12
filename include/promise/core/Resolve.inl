@@ -28,26 +28,31 @@ SOFTWARE.
 #include <functional>
 #include <memory>
 #include <type_traits>
+#include <variant>
 
 namespace promise {
+
+template <class T>
+class Resolver;
 
 /**
  * @brief Resolver handle used to resolve a promise with a value.
  */
 template <class T = void>
-struct Resolve;
+class Resolve;
 
 template <>
 /**
  * @brief Resolver for Promise<void>.
  */
-struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
+class Resolve<void> : public std::enable_shared_from_this<Resolve<void>> {
+public:
    /**
     * @brief Construct a void resolver from an implementation callback.
     *
     * @param impl Callback invoked on resolve.
     */
-   Resolve(std::function<void()> impl);
+   Resolve(std::shared_ptr<Resolver<void>> resolver);
 
    /**
     * @brief Resolve the promise.
@@ -64,8 +69,8 @@ struct Resolve<void> : std::enable_shared_from_this<Resolve<void>> {
    operator bool() const;
 
 private:
-   std::function<void()>     impl_;
-   mutable std::atomic<bool> resolved_{false};
+   std::shared_ptr<Resolver<void>> resolver_;
+   mutable std::atomic<bool>       resolved_{false};
 };
 
 template <class T>
@@ -73,13 +78,14 @@ template <class T>
 /**
  * @brief Resolver for Promise<T>.
  */
-struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
+class Resolve<T> : public std::enable_shared_from_this<Resolve<T>> {
+public:
    /**
     * @brief Construct a value resolver from an implementation callback.
     *
     * @param impl Callback invoked on resolve.
     */
-   Resolve(std::function<void(T const&)> impl);
+   Resolve(std::shared_ptr<Resolver<T>> resolver);
 
    /**
     * @brief Resolve the promise with a value.
@@ -98,8 +104,8 @@ struct Resolve<T> : std::enable_shared_from_this<Resolve<T>> {
    operator bool() const;
 
 private:
-   std::function<void(T const&)> impl_;
-   mutable std::atomic<bool>     resolved_{false};
+   std::shared_ptr<Resolver<T>> resolver_;
+   mutable std::atomic<bool>    resolved_{false};
 };
 
 }  // namespace promise

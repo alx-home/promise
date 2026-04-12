@@ -44,7 +44,7 @@ using UniqueLock = std::variant<
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
-template <class T, bool VOID_TYPE>
+template <class T>
 /**
  * @brief Base class for promises that can hold a resolved value.
  *
@@ -58,9 +58,9 @@ template <class T, bool VOID_TYPE>
  * @note This class is intended to be used as a base for promise implementations and should not be
  * used directly.
  */
-struct ValuePromise : VPromise {
+class ValuePromise : public VPromise {
 protected:
-   static constexpr bool IS_VOID = VOID_TYPE;
+   static constexpr bool IS_VOID = std::is_void_v<T>;
 
 public:
    /**
@@ -71,6 +71,7 @@ public:
     * @return Resolved value reference.
     */
    template <class SELF>
+      requires(!IS_VOID)
    auto const& GetValue(this SELF&& self, [[gnu::unused]] Lock lock) {
       assert(self.resolver_);
       assert(self.resolver_->value_);
@@ -83,6 +84,7 @@ public:
     * @return Resolved value reference.
     */
    template <class SELF>
+      requires(!IS_VOID)
    auto const& GetValue(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
@@ -96,18 +98,12 @@ public:
     * @return True if resolved.
     */
    template <class SELF>
+      requires(!IS_VOID)
    bool IsResolved(this SELF&& self, [[gnu::unused]] Lock lock) {
       assert(self.resolver_);
       return self.resolver_->value_ != nullptr;
    }
-};
 
-template <class T>
-struct ValuePromise<T, true> : VPromise {
-protected:
-   static constexpr bool IS_VOID = true;
-
-public:
    /**
     * @brief Check if the promise is resolved using an existing lock.
     *
@@ -116,9 +112,10 @@ public:
     * @return True if resolved.
     */
    template <class SELF>
+      requires(IS_VOID)
    bool IsResolved(this SELF&& self, [[gnu::unused]] Lock lock) {
       assert(self.resolver_);
-      return *self.resolver_->resolved_;
+      return self.resolver_->resolved_;
    }
 };
 

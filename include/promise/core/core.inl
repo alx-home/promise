@@ -57,6 +57,6 @@ template <class T, bool WITH_RESOLVER = false>
 class Promise;
 }
 
-template <class T, bool WITH_RESOLVER = true>
-struct Resolver;
+template <class T>
+class Resolver;
 }  // namespace promise
