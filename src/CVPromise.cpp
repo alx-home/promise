@@ -78,18 +78,20 @@ CVPromise::Notify() {
 
 void
 CVPromise::Reset() {
-   auto const [promise, resolve] = [this] constexpr {
-      std::unique_lock lock{mutex_};
-      auto             resolve = resolve_;
+   std::unique_lock lock{mutex_};
 
-      auto promise                                = std::move(*promise_);
-      auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
-      promise_ = std::make_unique<WPromise<void>>(std::move(new_promise));
-      resolve_ = std::move(new_resolve);
-      reject_  = std::move(new_reject);
-      return std::make_pair(std::move(promise), std::move(resolve));
-   }();
+   assert(promise_);
+   if (!promise_->Done()) {
+      return;
+   }
 
-   // Notify the old promise to unblock any waiting coroutines
-   (*resolve)();
+   auto resolve = resolve_;
+
+   auto promise = std::move(*promise_);
+
+   auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
+
+   promise_ = std::make_unique<WPromise<void>>(std::move(new_promise));
+   resolve_ = std::move(new_resolve);
+   reject_  = std::move(new_reject);
 }

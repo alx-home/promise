@@ -64,7 +64,6 @@ StatePromise::Done() {
 
 void
 StatePromise::Reset() {
-   ready_promise_.Reject<CVPromise::End>();
    ready_promise_.Reset();
    done_promise_.Reset();
 }
