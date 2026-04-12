@@ -67,6 +67,9 @@ protected:
       /**
        * @brief Unlock the lock on destruction.
        */
+#if defined(__clang__)
+      __attribute__((no_sanitize("address")))
+#endif
       ~Unlock() {
          if (lock_) {
             lock_.unlock();

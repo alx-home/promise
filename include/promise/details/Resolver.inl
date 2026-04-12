@@ -109,9 +109,10 @@ public:
       };
 
       auto resolver = std::make_shared<MakeSharedEnabler>();
-      auto resolve  = std::make_shared<promise::Resolve<T>>(resolver);
-      auto reject   = std::make_shared<promise::Reject>([resolver](std::exception_ptr exception
-                                                      ) constexpr { resolver->Reject(exception); });
+      auto resolve  = promise::Resolve<T>::Create(resolver);
+      auto reject   = promise::Reject::Create([resolver](std::exception_ptr exception) constexpr {
+         resolver->Reject(exception);
+      });
       return std::make_tuple(std::move(resolver), std::move(resolve), std::move(reject));
    }
 

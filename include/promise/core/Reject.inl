@@ -35,13 +35,22 @@ namespace promise {
  * @brief Rejector handle used to reject a promise with an exception.
  */
 class Reject : public std::enable_shared_from_this<Reject> {
-public:
+private:
    /**
     * @brief Construct a rejector from an implementation callback.
     *
     * @param impl Callback invoked on reject.
     */
    Reject(std::function<void(std::exception_ptr)> impl);
+
+public:
+   static constexpr std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl) {
+      struct MakeSharedEnabler : public Reject {
+         MakeSharedEnabler(std::function<void(std::exception_ptr)> impl)
+            : Reject(std::move(impl)) {}
+      };
+      return std::make_shared<MakeSharedEnabler>(std::move(impl));
+   }
 
    /**
     * @brief Reject the promise with an exception.

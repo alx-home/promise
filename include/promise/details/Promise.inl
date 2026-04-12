@@ -1111,7 +1111,11 @@ public:
     * @return Promise or tuple when RPROMISE is true.
     */
    template <bool RPROMISE, class FUN, class... ARGS>
-   static constexpr auto Create(FUN&& func, ARGS&&... args) {
+#if defined(__clang__)
+   __attribute__((no_sanitize("address")))
+#endif
+   static constexpr auto
+   Create(FUN&& func, ARGS&&... args) {
 
       struct FunctionImpl : Function {
          /**

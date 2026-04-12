@@ -46,13 +46,23 @@ template <>
  * @brief Resolver for Promise<void>.
  */
 class Resolve<void> : public std::enable_shared_from_this<Resolve<void>> {
-public:
+private:
    /**
     * @brief Construct a void resolver from an implementation callback.
     *
     * @param impl Callback invoked on resolve.
     */
    Resolve(std::shared_ptr<Resolver<void>> resolver);
+
+public:
+   static constexpr std::shared_ptr<Resolve<void>> Create(std::shared_ptr<Resolver<void>> resolver
+   ) {
+      struct MakeSharedEnabler : public Resolve<void> {
+         MakeSharedEnabler(std::shared_ptr<Resolver<void>> resolver)
+            : Resolve<void>(std::move(resolver)) {}
+      };
+      return std::make_shared<MakeSharedEnabler>(std::move(resolver));
+   }
 
    /**
     * @brief Resolve the promise.
@@ -79,13 +89,22 @@ template <class T>
  * @brief Resolver for Promise<T>.
  */
 class Resolve<T> : public std::enable_shared_from_this<Resolve<T>> {
-public:
+private:
    /**
     * @brief Construct a value resolver from an implementation callback.
     *
     * @param impl Callback invoked on resolve.
     */
    Resolve(std::shared_ptr<Resolver<T>> resolver);
+
+public:
+   static constexpr std::shared_ptr<Resolve<T>> Create(std::shared_ptr<Resolver<T>> resolver) {
+      struct MakeSharedEnabler : public Resolve<T> {
+         MakeSharedEnabler(std::shared_ptr<Resolver<T>> resolver)
+            : Resolve<T>(std::move(resolver)) {}
+      };
+      return std::make_shared<MakeSharedEnabler>(std::move(resolver));
+   }
 
    /**
     * @brief Resolve the promise with a value.
