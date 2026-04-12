@@ -91,13 +91,15 @@ All(PROMISE&&... promise) {
                               std::is_void_v<return_t<PROMISE>>,
                               std::monostate,
                               return_t<PROMISE>>...>> {
-        co_return std::make_tuple(([]<class... RESULT>(RESULT... result) constexpr {
-           if constexpr (sizeof...(RESULT)) {
-              return result...[0];
+        co_return std::make_tuple(co_await [](auto&& promise) constexpr {
+           if constexpr (std::is_void_v<return_t<decltype(promise)>>) {
+              return std::forward<decltype(promise)>(promise).Then([]() constexpr {
+                 return std::monostate{};
+              });
            } else {
-              return std::monostate{};
+              return std::forward<decltype(promise)>(promise);
            }
-        }(co_await promise))...);
+        }(std::forward<PROMISE>(promise))...);
      }
    );
 }
