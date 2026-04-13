@@ -60,7 +60,7 @@ public:
          invoke,
          until = std::move(until)]() mutable constexpr {
            if (!::Pool<false, SIZE>::Dispatch(
-                 [resolve = std::move(resolve), promise, &invoke]() mutable {
+                 [&resolve, promise, &invoke]() mutable {
                     bool      done = false;
                     ScopeExit _{[&invoke, &done] constexpr {
                        if (done) {
