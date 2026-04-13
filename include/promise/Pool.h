@@ -59,6 +59,13 @@ public:
          // Self hosted invoke to allow chaining continuations if promise not already awaited
          invoke,
          until = std::move(until)]() mutable constexpr {
+           bool      release = true;
+           ScopeExit _{[&invoke, &release] constexpr {
+              if (release) {
+                 invoke.reset();
+              }
+           }};
+
            if (!::Pool<false, SIZE>::Dispatch(
                  [&resolve, promise, &invoke]() mutable {
                     bool      done = false;
@@ -79,6 +86,8 @@ public:
                  until
                )) {
               reject->template Apply<QueueStopped>(this->GetName());
+           } else {
+              release = false;
            }
         };
 
