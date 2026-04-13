@@ -30,8 +30,12 @@ SOFTWARE.
 #include <utils/Pool.h>
 #include <optional>
 #include <type_traits>
+#include <utility>
+#include <chrono>
 
 namespace promise {
+
+using namespace std::chrono;
 
 template <std::size_t SIZE = 10>
 class Pool : private ::Pool<false, SIZE> {
@@ -45,59 +49,37 @@ public:
    using ::Pool<false, SIZE>::Stop;
    using ::Pool<false, SIZE>::ThreadIds;
 
+   /**
+    * @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
+result.
+     *
+     * @tparam RETURN Return type of the function.
+     * @param until Optional time point until which the function should be executed. If not
+provided, executes as soon as possible.
+     * @return Promise that resolves with the function's return value or rejects if the queue is
+stopped.
+     */
    [[nodiscard]] WPromise<void> Dispatch(
      std::optional<typename Pool::time_point> until = std::nullopt
    ) const noexcept {
       auto [promise, resolve, reject] = Promise<void>::Create();
-
-      auto invoke = std::make_shared<std::function<void()>>([] {});
-      *invoke =
-        [this,
-         resolve = std::move(resolve),
-         reject  = std::move(reject),
-         promise,
-         // Self hosted invoke to allow chaining continuations if promise not already awaited
-         invoke,
-         until = std::move(until)]() mutable constexpr {
-           bool      release = true;
-           ScopeExit _{[&invoke, &release] constexpr {
-              if (release) {
-                 invoke.reset();
-              }
-           }};
-
-           if (::Pool<false, SIZE>::Dispatch(
-                 [&resolve, &promise, &invoke]() mutable {
-                    bool      done = false;
-                    ScopeExit _{[&invoke, &done] constexpr {
-                       if (done) {
-                          invoke.reset();
-                       }
-                    }};
-
-                    if (promise.Awaiters()) {
-                       done = true;
-                       (*resolve)();
-                    } else {
-                       // Promise not already awaited, chain continuation to resolve when awaited
-                       (*invoke)();
-                    }
-                 },
-                 until
-               )) {
-              release = false;
-           } else {
-              reject->template Apply<QueueStopped>(this->GetName());
-           }
-        };
-
-      (*invoke)();
+      if (!::Pool<false, SIZE>::Dispatch(
+            [resolve = std::move(resolve), promise]() mutable {
+               // Wait until the promise is actually awaited before resolving, to ensure the caller
+               // is called from within this thread.
+               while (promise.UseCount() == 0);
+               (*resolve)();
+            },
+            until
+          )) {
+         reject->template Apply<QueueStopped>(this->GetName());
+      }
 
       return std::move(promise);
    };
 
    [[nodiscard]] WPromise<void> Dispatch(typename Pool::duration delay) const noexcept {
-      return Dispatch(std::chrono::steady_clock::now() + delay);
+      return Dispatch(steady_clock::now() + delay);
    };
 
    template <class RETURN>
@@ -164,7 +146,7 @@ public:
 
    template <class FUN>
    [[nodiscard]] auto Dispatch(FUN&& func, typename Pool::duration delay) const noexcept {
-      return Dispatch(std::forward<FUN>(func), std::chrono::steady_clock::now() + delay);
+      return Dispatch(std::forward<FUN>(func), steady_clock::now() + delay);
    }
 };
 

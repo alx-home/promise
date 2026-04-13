@@ -290,6 +290,7 @@ private:
     */
    void Await(std::coroutine_handle<> h, UniqueLock lock) {
       (void)lock;
+      ++use_count_;
       awaiters_.emplace_back(h);
    }
 
@@ -303,7 +304,7 @@ private:
     */
    std::size_t Await(std::function<void()> fun, UniqueLock lock) {
       (void)lock;
-      auto const id = ++next_id_;
+      auto const id = ++use_count_;
       awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
       return id;
    }
@@ -341,6 +342,13 @@ private:
       std::shared_lock lock{this->mutex_};
       return this->awaiters_.size();
    }
+
+   /**
+    * @brief Get the total number of awaiter registrations on this promise.
+    *
+    * @return Total number of awaiter registrations.
+    */
+   std::size_t UseCount() const noexcept { return use_count_; }
 
    /**
     * @brief Check whether the promise is ready.
@@ -962,6 +970,7 @@ private:
      std::shared_ptr<Reject> const&      reject
    ) & {
       if (race_promise.Done()) {
+         ++use_count_;
          // If the race promise is already done, we can skip registering a continuation and just
          // return it directly
          return std::move(race_promise);
@@ -1197,7 +1206,7 @@ public:
    }
 
 private:
-   std::atomic<std::size_t> next_id_{0};
+   std::atomic<std::size_t> use_count_{0};
    struct AwaitFunction : std::function<void()> {
       std::size_t id_{0};
    };

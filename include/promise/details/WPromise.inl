@@ -225,6 +225,21 @@ public:
       );
    }
 
+   /**
+    * @brief Get the total number of awaiter registrations on this promise.
+    *
+    * @return Total number of awaiter registrations.
+    */
+   std::size_t UseCount() const noexcept {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           return details->UseCount();
+        },
+        details_
+      );
+   }
+
    template <class FUN, class SELF, class... ARGS>
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
    /**
