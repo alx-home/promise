@@ -1031,12 +1031,14 @@ public:
     */
    static constexpr auto Create() {
       if constexpr (WITH_RESOLVER) {
+         using PromisePtr = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
+
          details::IPromise<T, WITH_RESOLVER> promise{handle_type{}};
+         assert(std::holds_alternative<PromisePtr>(promise.details_));
 
          auto [resolver, resolve, reject] = promise::Resolver<T>::Create();
 
-         auto const details =
-           std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
+         auto const details = std::get<PromisePtr>(promise.details_).get();
          resolver->promise_ = details;
          details->resolver_ = std::move(resolver);
 
@@ -1164,8 +1166,11 @@ public:
       }();
 
       {
-         auto const details =
-           std::get<std::shared_ptr<Promise<T, WITH_RESOLVER>>>(promise.details_).get();
+         using PromisePtr = std::shared_ptr<Promise<T, WITH_RESOLVER>>;
+         assert(std::holds_alternative<PromisePtr>(promise.details_));
+         assert(std::get<PromisePtr>(promise.details_));
+
+         auto const details = std::get<PromisePtr>(promise.details_);
          details->resolver_ = std::move(resolver);
          details->function_ = std::move(holder);
 
