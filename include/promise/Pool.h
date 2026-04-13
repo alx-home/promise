@@ -49,11 +49,40 @@ public:
      std::optional<typename Pool::time_point> until = std::nullopt
    ) const noexcept {
       auto [promise, resolve, reject] = Promise<void>::Create();
-      if (!::Pool<false, SIZE>::Dispatch(
-            [resolve = std::move(resolve)]() mutable { (*resolve)(); }, until
-          )) {
-         reject->template Apply<QueueStopped>(this->GetName());
-      }
+
+      auto invoke = std::make_shared<std::function<void()>>([] {});
+      *invoke =
+        [this,
+         resolve = std::move(resolve),
+         reject  = std::move(reject),
+         promise,
+         // Self hosted invoke to allow chaining continuations if promise not already awaited
+         invoke,
+         until = std::move(until)]() mutable constexpr {
+           if (!::Pool<false, SIZE>::Dispatch(
+                 [resolve = std::move(resolve), promise, &invoke]() mutable {
+                    bool      done = false;
+                    ScopeExit _{[&invoke, &done] constexpr {
+                       if (done) {
+                          invoke.reset();
+                       }
+                    }};
+
+                    if (promise.Awaiters()) {
+                       done = true;
+                       (*resolve)();
+                    } else {
+                       // Promise not already awaited, chain continuation to resolve when awaited
+                       (*invoke)();
+                    }
+                 },
+                 until
+               )) {
+              reject->template Apply<QueueStopped>(this->GetName());
+           }
+        };
+
+      (*invoke)();
 
       return std::move(promise);
    };
