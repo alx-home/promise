@@ -209,6 +209,22 @@ public:
       );
    }
 
+   /**
+    * @brief Get the number of awaiters currently waiting on this promise.
+    *
+    * @return Number of awaiters.
+    */
+   std::size_t Awaiters() const noexcept {
+      return std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           std::shared_lock lock{details->mutex_};
+           return details->Awaiters();
+        },
+        details_
+      );
+   }
+
    template <class FUN, class SELF, class... ARGS>
    [[nodiscard("Either store this promise or call Detach()")]] constexpr auto
    /**
@@ -507,7 +523,17 @@ public:
     */
    using WPromise<T>::Value;
 
+   /**
+    * @brief Get the stored exception (valid when rejected).
+    * @return Stored exception pointer.
+    */
    using WPromise<T>::Exception;
+
+   /**
+    * @brief Get the number of awaiters currently waiting on this promise.
+    * @return Number of awaiters.
+    */
+   using WPromise<T>::Awaiters;
 
    /**
     * @brief Chain a continuation to run on resolve.

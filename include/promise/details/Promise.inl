@@ -333,6 +333,16 @@ private:
    }
 
    /**
+    * @brief Get the number of awaiters currently waiting on this promise.
+    *
+    * @return Number of awaiters.
+    */
+   std::size_t Awaiters() const {
+      std::shared_lock lock{this->mutex_};
+      return this->awaiters_.size();
+   }
+
+   /**
     * @brief Check whether the promise is ready.
     *
     * @param lock Active lock for thread-safe access.
