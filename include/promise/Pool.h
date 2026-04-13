@@ -66,7 +66,7 @@ public:
               }
            }};
 
-           if (!::Pool<false, SIZE>::Dispatch(
+           if (::Pool<false, SIZE>::Dispatch(
                  [&resolve, promise, &invoke]() mutable {
                     bool      done = false;
                     ScopeExit _{[&invoke, &done] constexpr {
@@ -85,9 +85,9 @@ public:
                  },
                  until
                )) {
-              reject->template Apply<QueueStopped>(this->GetName());
-           } else {
               release = false;
+           } else {
+              reject->template Apply<QueueStopped>(this->GetName());
            }
         };
 
