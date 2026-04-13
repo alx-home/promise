@@ -97,11 +97,11 @@ public:
     *
     * @param h Awaiting coroutine handle.
     */
-   auto await_suspend(std::coroutine_handle<> h) const {
-      return std::visit(
+   void await_suspend(std::coroutine_handle<> h) const {
+      std::visit(
         [h = std::move(h)](auto const& details) constexpr {
            assert(details);
-           return details->await_suspend(std::move(h));
+           details->await_suspend(std::move(h));
         },
         details_
       );
@@ -113,7 +113,7 @@ public:
     * @return Resolved value for non-void promises.
     * @warning Throws if the promise was rejected.
     */
-   auto await_resume() const noexcept(false) {
+   T await_resume() const noexcept(false) {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);

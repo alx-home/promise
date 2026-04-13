@@ -67,7 +67,7 @@ public:
            }};
 
            if (::Pool<false, SIZE>::Dispatch(
-                 [&resolve, promise, &invoke]() mutable {
+                 [&resolve, &promise, &invoke]() mutable {
                     bool      done = false;
                     ScopeExit _{[&invoke, &done] constexpr {
                        if (done) {
