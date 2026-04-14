@@ -91,6 +91,7 @@ protected:
        */
       template <class SELF>
       void return_void(this SELF&& self) {
+         (void)self;
          assert(!self.delayed_return_);
       }
    };
