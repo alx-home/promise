@@ -17,7 +17,9 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - Helpers: `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()`.
 - Works with both coroutine and non-coroutine callables passed to `MakePromise`.
 - `CVPromise` helper for condition-variable-style async notification.
-- State inspection via `Done()`, `Resolved()`, `Rejected()`, `Value()`, and `Exception()`.
+- `StatePromise` helper for ready/done state signaling across coroutines.
+- `promise::Pool<SIZE>` and `promise::MessageQueue` for dispatching work onto worker threads.
+- State inspection via `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()`, `Awaiters()`, and `UseCount()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
 - Public handle types: `Promise<T>` (coroutine return), `WPromise<T>` (owning handle), and `VPromise` for type-erased pointers.
 - Lambdas are stored in the promise, so captures survive until resolution.
@@ -98,9 +100,10 @@ auto Demo = MakePromise([]() -> Promise<void> {
 
 ```cpp
 #include <promise/promise.h>
+#include <promise/StatePromise.h>
 #include <stdexcept>
 
-auto [Create, resolve, reject] = promise::Create<int>();
+auto [created, resolve, reject] = promise::Create<int>();
 resolve->operator()(7);
 
 auto all = promise::All(
@@ -126,6 +129,9 @@ auto [prom2, resolve2, reject2] = MakeRPromise(
 auto ok = Promise<int>::Resolve(5);
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
 auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
+
+StatePromise state;
+state.Ready();
 ```
 
 ## Forwarding arguments into `MakePromise`
@@ -237,6 +243,10 @@ auto prom2 = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promis
 });
 ```
 
+`MakeReject<EXCEPTION>(reject, ...)` is relaxed by default. If the promise is already rejected,
+it returns `false` instead of throwing. Use `MakeReject<EXCEPTION, false>(reject, ...)` when you
+want double rejects to raise an exception instead.
+
 ## `Promise::Resolve` and `Promise::Reject`
 
 Use these static helpers to create an already-resolved or already-rejected promise without
@@ -337,6 +347,11 @@ auto first = promise::Race(
 auto value = co_await first; // std::variant<int, double>
 ```
 
+Return-type rules for `All`:
+
+- `co_await promise::All(...)` yields a tuple of each resolved value.
+- If one of the awaited promises returns `void`, its tuple slot becomes `std::monostate`.
+
 Return-type rules for `Race`:
 
 - If all raced promises return the same non-void type, `co_await` yields that type.
@@ -371,9 +386,73 @@ ready.Reset();  // resolves current waiters and arms the next wait
 Notes:
 
 - `Wait()` returns a `WPromise<void>` and `CVPromise` can also be used directly in `co_await`.
+- `operator*()` returns the current `WPromise<void>`, so `co_await *ready;` is equivalent to `co_await ready.Wait();`.
+- `operator->()` gives access to the underlying promise handle for inspection such as `ready->Resolved()`.
 - `Notify()` resolves the current wait state.
 - `Reset()` resolves the current waiters and creates a fresh wait state for the next cycle.
 - Destroying a `CVPromise` rejects outstanding waiters with `CVPromise::End`.
+
+## `StatePromise` for ready/done workflows
+
+`StatePromise` combines two `CVPromise` instances into a small helper for state-machine style
+coordination between coroutines.
+
+```cpp
+#include <promise/StatePromise.h>
+
+StatePromise state;
+
+auto worker = MakePromise([&]() -> Promise<void> {
+	co_await state.WaitReady();
+	// Start work after the state becomes ready.
+	co_await state.WaitDone();
+	co_return;
+});
+
+state.Ready();
+state.Done();
+```
+
+Methods:
+
+- `WaitReady()` waits until `Ready()` is called.
+- `WaitDone()` waits until `Done()` is called.
+- `Wait()` races ready/done and resolves when one of them happens first.
+- `Reset()` arms the helper again for the next cycle.
+
+Destroying a `StatePromise` calls `Done()` so waiting coroutines are unblocked.
+
+## `promise::Pool` and `promise::MessageQueue`
+
+Use `promise::Pool<SIZE>` to dispatch work onto worker threads and get back promise handles.
+Use `promise::MessageQueue` when you specifically want a single-thread queue and need to funnel
+work back onto that queue thread.
+
+```cpp
+#include <promise/MessageQueue.h>
+
+promise::Pool<4> pool{"worker"};
+promise::MessageQueue queue{"ui"};
+
+auto background = pool.Dispatch([]() {
+	return 42;
+});
+
+auto ordered = queue.Ensure([]() {
+	// Continue on the queue thread.
+});
+
+auto value = co_await background;
+co_await ordered;
+```
+
+Notes:
+
+- `Dispatch(...)` returns a `WPromise<T>` or `WPromise<void>` depending on the callable.
+- Delayed execution is supported via `Dispatch(duration)` and `Dispatch(func, duration)`.
+- `MessageQueue::Ensure(...)` is the helper to use when a continuation must run in the message-queue thread context. In practice, use `co_await queue.Ensure();` to switch execution back into that queue when the current code may be running on a different thread, then continue the coroutine from there.
+- `Ensure(...)` is currently an alias for `Dispatch(...)` on a single worker thread.
+- `MessageQueue::ThreadId()` returns the queue thread id.
 
 ## Finally usage
 
@@ -504,7 +583,7 @@ auto chain = MakePromise([]() -> Promise<int> { co_return 2; })
 (void)co_await chain; // co_await type follows the same rules
 ```
 
-## Done, Resolved, Rejected, Value, Exception
+## Done, Resolved, Rejected, Value, Exception, Awaiters, UseCount
 
 These methods let you inspect a promise state without awaiting it:
 
@@ -513,6 +592,8 @@ These methods let you inspect a promise state without awaiting it:
 - `Rejected()` returns `true` when the promise completed with an exception.
 - `Value()` returns the resolved value (only valid when resolved).
 - `Exception()` returns the stored exception (only meaningful when rejected).
+- `Awaiters()` returns the number of coroutines currently waiting on the promise.
+- `UseCount()` returns the total number of awaiter registrations observed by that promise.
 
 ```cpp
 #include <promise/promise.h>
@@ -536,6 +617,21 @@ Warnings:
   throw, depending on build/runtime checks.
 - `Value()` is only valid for resolved promises; `Exception()` is only meaningful for rejected
   promises. Prefer `co_await` or `Then`/`Catch` for correct flow.
+
+## `[[nodiscard]]` and detached chains
+
+`MakePromise`, `Then`, `Catch`, `Finally`, `MakeRPromise`, and the queue/pool dispatch helpers are
+annotated so the compiler warns if you create a promise and immediately discard it.
+
+If you intentionally do not need the returned handle, call `Detach()` explicitly:
+
+```cpp
+MakePromise([]() -> Promise<void> {
+	co_return;
+}).Finally([]() {
+	// Cleanup only.
+}).Detach();
+```
 
 ## Detach
 
