@@ -36,6 +36,7 @@ SOFTWARE.
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <tuple>
 #include <type_traits>
@@ -120,7 +121,10 @@ public:
          assert(this->self_owned_);
       }
 
-      assert(WITH_RESOLVER || this->IsDone(this->lock_));
+      assert(WITH_RESOLVER || [this] constexpr {
+         std::shared_lock lock{this->mutex_};
+         return this->IsDone(lock);
+      }());
    };
 
    Promise(Promise&& rhs) noexcept            = delete;
@@ -1010,7 +1014,8 @@ private:
          );
 
          return std::move(race_promise).Finally([this, id]() constexpr {
-            this->UnAwait(id, this->lock_);
+            std::lock_guard lock{this->mutex_};
+            this->UnAwait(id, lock);
          });
       }
    }
