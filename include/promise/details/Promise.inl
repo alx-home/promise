@@ -1012,6 +1012,7 @@ private:
            },
            ulock
          );
+         ulock.unlock();
 
          return std::move(race_promise).Finally([this, id]() constexpr {
             std::lock_guard lock{this->mutex_};
