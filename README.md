@@ -1,4 +1,5 @@
 [![Build](https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg)](https://github.com/alx-home/promise/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09)](https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce)
 
 # alx-home promise
 
