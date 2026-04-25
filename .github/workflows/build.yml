@@ -27,6 +27,3 @@ jobs:
               SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
               SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
               SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
-
-         - name: Debug scanner version
-           run: sonar-scanner --version || true
