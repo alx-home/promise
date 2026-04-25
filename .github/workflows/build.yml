@@ -17,7 +17,14 @@ jobs:
 
          - name: Decode certificate
            run: |
-              echo ${SONAR_CERT} | base64 -d > /tmp/client.jks
+              echo ${SONAR_CERT} | base64 -d > /tmp/certs.p12
+              keytool -importkeystore \
+                  -srckeystore /tmp/certs.p12 \
+                  -srcstoretype PKCS12 \
+                  -srcstorepass "${SONAR_CERT_PWD}" \
+                  -destkeystore /tmp/client.jks \
+                  -deststoretype JKS \
+                  -deststorepass changeit
            env:
               SONAR_CERT: ${{ secrets.SONAR_CERT }}
               SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
@@ -28,7 +35,7 @@ jobs:
               SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
               SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
               SONAR_SCANNER_OPTS: "-Djavax.net.ssl.keyStore=/tmp/client.jks
-                 -Djavax.net.ssl.keyStorePassword=${{ secrets.SONAR_CERT_PWD }}"
+                 -Djavax.net.ssl.keyStorePassword=changeit"
 
          - name: Debug scanner version
            run: sonar-scanner --version || true
