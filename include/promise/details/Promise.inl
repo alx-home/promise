@@ -138,8 +138,8 @@ public:
     * @return True if ready to resume.
     */
    bool await_ready() {
-      this->lock_.lock();
-      return Ready(this->lock_);
+      std::shared_lock lock{this->mutex_};
+      return Ready(lock);
    }
 
    /**
@@ -147,14 +147,20 @@ public:
     *
     * @param h Awaiting coroutine handle.
     */
-   void await_suspend(std::coroutine_handle<> h) {
-      Unlock _{this->lock_};
+   bool await_suspend(std::coroutine_handle<> h) {
+      std::unique_lock lock{this->mutex_};
+
+      if (Ready(lock)) {
+         return false;
+      }
 
       if constexpr (!WITH_RESOLVER) {
          assert(this->handle_);
       }
 
-      Await(h, this->lock_);
+      Await(h, lock);
+
+      return true;
    }
 
    /**
@@ -163,21 +169,16 @@ public:
     * @return Resolved value for non-void promises.
     */
    auto await_resume() noexcept(false) {
-      if (!this->lock_) {
-         // await_suspend has released the lock
-         this->lock_.lock();
-      }
+      std::shared_lock lock{this->mutex_};
 
-      Unlock _{this->lock_};
-
-      if (auto const& exception = this->GetException(this->lock_); exception) {
+      if (auto const& exception = this->GetException(lock); exception) {
          std::rethrow_exception(exception);
       }
 
       if constexpr (IS_VOID) {
-         assert(this->IsResolved(this->lock_));
+         assert(this->IsResolved(lock));
       } else {
-         return this->GetValue(this->lock_);
+         return this->GetValue(lock);
       }
    }
 
@@ -264,7 +265,10 @@ private:
           *
           * @param h Awaiting coroutine handle.
           */
-         void await_suspend(std::coroutine_handle<> h) final { self_.await_suspend(h); }
+         bool await_suspend(std::coroutine_handle<> h) final {
+            self_.await_suspend(h);
+            return true;
+         }
 
       private:
          details::Promise<T, WITH_RESOLVER>& self_;

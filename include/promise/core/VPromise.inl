@@ -67,7 +67,7 @@ public:
        *
        * @param h Awaiting coroutine handle.
        */
-      virtual void await_suspend(std::coroutine_handle<> h) = 0;
+      virtual bool await_suspend(std::coroutine_handle<> h) = 0;
    };
 
    /**

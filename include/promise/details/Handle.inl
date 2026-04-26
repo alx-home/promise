@@ -424,7 +424,6 @@ public:
 
 protected:
    mutable std::shared_mutex mutex_{};
-   mutable Locker            lock_{this->mutex_, std::defer_lock};
 
    handle_type                                         handle_{nullptr};
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
