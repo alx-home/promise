@@ -921,7 +921,7 @@ private:
                     apply_exception(reject, std::move(func), exception);
                  } else if constexpr (IS_VOID) {
                     lock.unlock();
-                    apply_value(std::move(resolve), std::move(reject), std::move(func));
+                    apply_value(std::move(resolve), reject, std::move(func));
                  } else {
                     auto const& value = this->GetValue(lock);
                     lock.unlock();
