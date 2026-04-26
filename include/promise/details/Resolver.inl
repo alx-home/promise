@@ -89,7 +89,8 @@ class Resolver
    : public std::enable_shared_from_this<Resolver<T>>
    , private ResolverValue<T> {
 public:
-   using Promise = std::variant<details::Promise<T, true>*, details::Promise<T, false>*>;
+   using Promise = std::
+     variant<std::weak_ptr<details::Promise<T, true>>, std::weak_ptr<details::Promise<T, false>>>;
 
 private:
    Resolver() = default;
@@ -131,8 +132,10 @@ public:
       requires(!std::is_void_v<T> && std::is_convertible_v<TT, T>)
    bool Resolve(TT&& value) {
       return std::visit(
-        [&](auto&& promise) {
+        [&](auto&& promise_) {
            if (!resolved_.exchange(true)) {
+              auto const promise = promise_.lock();
+              assert(promise);
               std::unique_lock lock{promise->mutex_};
 
               assert(!ResolverValue<T>::value_);
@@ -158,8 +161,10 @@ public:
       requires(std::is_void_v<T>)
    bool Resolve() {
       return std::visit(
-        [&](auto&& promise) {
+        [&](auto&& promise_) {
            if (!resolved_.exchange(true)) {
+              auto const promise = promise_.lock();
+              assert(promise);
               std::unique_lock lock{promise->mutex_};
 
               assert(!exception_);
@@ -192,8 +197,10 @@ public:
     */
    bool Reject(std::exception_ptr exception) {
       return std::visit(
-        [&](auto&& promise) {
+        [&](auto&& promise_) {
            if (!resolved_.exchange(true)) {
+              auto const promise = promise_.lock();
+              assert(promise);
               std::unique_lock lock{promise->mutex_};
 
               if constexpr (!std::is_void_v<T>) {
@@ -214,7 +221,7 @@ public:
    }
 
 private:
-   Promise            promise_{static_cast<details::Promise<T, false>*>(nullptr)};
+   Promise            promise_{std::weak_ptr<details::Promise<T, false>>{}};
    std::exception_ptr exception_{};
    std::atomic<bool>  resolved_{false};
 

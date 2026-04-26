@@ -162,33 +162,8 @@ protected:
           */
          constexpr void await_resume() const noexcept(false) {
             if (!self_.resolver_) {
-               // Promise has been created without MakePromise
-
-               if (WITH_RESOLVER) {
-                  throw std::runtime_error("Promise with resolver must be created with MakePromise"
-                  );
-               }
-
-               auto [resolver, resolve, reject] = Resolver<T>::Create();
-               self_.resolver_                  = resolver;
-
-               assert(!self_.function_);
-               struct FunctionImpl : Function {
-                  FunctionImpl(
-                    std::shared_ptr<promise::Resolve<T>> resolve,
-                    std::shared_ptr<promise::Reject>     reject
-                  )
-                     : resolve_(std::move(resolve))
-                     , reject_(std::move(reject)) {}
-
-                  std::shared_ptr<promise::Resolve<T>> resolve_;
-                  std::shared_ptr<promise::Reject>     reject_;
-               };
-               self_.function_ =
-                 std::make_unique<FunctionImpl>(std::move(resolve), std::move(reject));
+               throw std::runtime_error("Promise with resolver must be created with MakePromise");
             }
-
-            self_.resolver_->promise_ = &self_;
          }
       };
       using FinalSuspend = std::suspend_never;

@@ -1067,7 +1067,7 @@ public:
 
          auto [resolver, resolve, reject] = promise::Resolver<T>::Create();
 
-         auto const details = std::get<PromisePtr>(promise.details_).get();
+         auto const details = std::get<PromisePtr>(promise.details_);
          resolver->promise_ = details;
          details->resolver_ = std::move(resolver);
 
@@ -1200,6 +1200,8 @@ public:
          assert(std::get<PromisePtr>(promise.details_));
 
          auto const details = std::get<PromisePtr>(promise.details_);
+         resolver->promise_ = details;
+
          details->resolver_ = std::move(resolver);
          details->function_ = std::move(holder);
 
