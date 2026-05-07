@@ -154,6 +154,10 @@ public:
          return false;
       }
 
+      if constexpr (!WITH_RESOLVER) {
+         assert(this->handle_);
+      }
+
       Await(h, lock);
 
       return true;
