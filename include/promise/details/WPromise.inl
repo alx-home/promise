@@ -64,13 +64,7 @@ public:
       std::visit(
         [](auto& details) constexpr {
            if (details && !details->IsDone()) {
-              std::mutex              mutex;
-              std::unique_lock        lock{mutex};
-              std::condition_variable cv{};
-
-              // Promise must not be detached to avoid infinite loop
-              auto promise = details->Finally(std::function{[&]() constexpr { cv.notify_all(); }});
-              cv.wait(lock, [&details]() constexpr { return details->IsDone(); });
+              details->WaitDone();
            }
         },
         details_
@@ -235,6 +229,34 @@ public:
         [](auto const& details) constexpr {
            assert(details);
            return details->UseCount();
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Wait for the promise to be awaited.
+    *
+    * @param current_count Optional current use count to wait from a specific point.
+    */
+   void WaitAwaited(std::optional<std::size_t> current_count = std::nullopt) const {
+      std::visit(
+        [current_count](auto const& details) constexpr {
+           assert(details);
+           details->WaitAwaited(current_count);
+        },
+        details_
+      );
+   }
+
+   /**
+    * @brief Wait for the promise to be resolved or rejected.
+    */
+   void WaitDone() const {
+      std::visit(
+        [](auto const& details) constexpr {
+           assert(details);
+           details->WaitDone();
         },
         details_
       );

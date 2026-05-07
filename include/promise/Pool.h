@@ -67,7 +67,7 @@ stopped.
             [resolve = std::move(resolve), promise]() mutable {
                // Wait until the promise is actually awaited before resolving, to ensure the caller
                // is called from within this thread.
-               while (promise.UseCount() == 0);
+               promise.WaitAwaited(0);
                (*resolve)();
             },
             until

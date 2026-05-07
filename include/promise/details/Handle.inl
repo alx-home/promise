@@ -30,6 +30,7 @@ SOFTWARE.
 #include <utils/Scoped.h>
 #include <algorithm>
 #include <cassert>
+#include <condition_variable>
 #include <coroutine>
 #include <exception>
 #include <memory>
@@ -188,6 +189,7 @@ protected:
             assert(parent_);
             parent_->handle_   = nullptr;
             parent_->function_ = nullptr;
+            parent_->cv_.notify_all();
 
             if (parent_->IsDone(lock)) {
                parent_->OnResolved(lock);
@@ -279,6 +281,29 @@ public:
    }
 
    /**
+    * @brief Wait for the promise to be resolved or rejected.
+    */
+   void WaitDone() {
+      std::shared_lock lock{mutex_};
+      cv_.wait(lock, [this, &lock]() constexpr { return this->IsDone(lock) && this->Done(lock); });
+   }
+
+   /**
+    * @brief Wait for the promise to be awaited.
+    *
+    * @param current_count Optional current use count to wait from a specific point.
+    */
+   template <class SELF>
+   void
+   WaitAwaited(this SELF const& self, std::optional<std::size_t> current_count = std::nullopt) {
+      std::shared_lock lock{self.mutex_};
+
+      auto const last_count = current_count ? *current_count : self.use_count_.load();
+
+      self.cv_.wait(lock, [&self, last_count]() constexpr { return self.use_count_ > last_count; });
+   }
+
+   /**
     * @brief Check if rejected using an existing lock.
     *
     * @param lock Active lock for thread-safe access.
@@ -324,6 +349,7 @@ public:
    void OnResolved(this SELF&& self, std::unique_lock<std::shared_mutex>& lock) {
       // If not Done, will be done on final_suspends
       if (self.Done(lock)) {
+         self.cv_.notify_all();
          std::vector<typename std::remove_cvref_t<SELF>::Awaiter> awaiters{};
 
          self.awaiters_.swap(awaiters);
@@ -394,7 +420,8 @@ public:
    }
 
 protected:
-   mutable std::shared_mutex mutex_{};
+   mutable std::shared_mutex           mutex_{};
+   mutable std::condition_variable_any cv_{};
 
    handle_type                                         handle_{nullptr};
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};

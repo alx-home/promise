@@ -299,6 +299,8 @@ private:
    void Await(std::coroutine_handle<> h, UniqueLock lock) {
       (void)lock;
       ++use_count_;
+      this->cv_.notify_all();
+
       awaiters_.emplace_back(h);
    }
 
@@ -313,6 +315,8 @@ private:
    std::size_t Await(std::function<void()> fun, UniqueLock lock) {
       (void)lock;
       auto const id = ++use_count_;
+      this->cv_.notify_all();
+
       awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
       return id;
    }
@@ -978,7 +982,11 @@ private:
      std::shared_ptr<Reject> const&      reject
    ) & {
       if (race_promise.Done()) {
-         ++use_count_;
+         {
+            std::unique_lock lock{this->mutex_};
+            ++use_count_;
+            this->cv_.notify_all();
+         }
          // If the race promise is already done, we can skip registering a continuation and just
          // return it directly
          return std::move(race_promise);
