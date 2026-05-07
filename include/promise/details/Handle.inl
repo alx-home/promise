@@ -183,21 +183,16 @@ protected:
        * @return Final suspend awaitable.
        */
       FinalSuspend final_suspend() noexcept {
-         {
+         ScopeExit _{[this] constexpr {
             std::unique_lock lock{parent_->mutex_};
             assert(parent_);
-            assert(parent_->resolver_);
-
             parent_->handle_   = nullptr;
             parent_->function_ = nullptr;
 
-            if constexpr (WITH_RESOLVER) {
-               if (parent_->IsDone(lock)) {
-                  parent_->OnResolved(lock);
-                  return {};
-               }
+            if (parent_->IsDone(lock)) {
+               parent_->OnResolved(lock);
             }
-         }
+         }};
 
          if (delayed_return_) {
             auto const delayed_return = std::move(*delayed_return_);
