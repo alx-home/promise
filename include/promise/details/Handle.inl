@@ -183,38 +183,39 @@ protected:
        * @return Final suspend awaitable.
        */
       FinalSuspend final_suspend() noexcept {
-         auto const parent = this->parent_;
          {
-            std::unique_lock lock{parent->mutex_};
-            assert(parent);
-            assert(parent->resolver_);
-            parent->handle_   = nullptr;
-            parent->function_ = nullptr;
+            std::unique_lock lock{parent_->mutex_};
+            assert(parent_);
+            assert(parent_->resolver_);
+
+            parent_->handle_   = nullptr;
+            parent_->function_ = nullptr;
 
             if constexpr (WITH_RESOLVER) {
-               if (parent->IsDone(lock)) {
-                  parent->OnResolved(lock);
+               if (parent_->IsDone(lock)) {
+                  parent_->OnResolved(lock);
                   return {};
                }
             }
          }
+
          if (delayed_return_) {
             auto const delayed_return = std::move(*delayed_return_);
             delayed_return_           = std::nullopt;
 
             if constexpr (IS_VOID) {
-               parent->resolver_->Reject(std::move(delayed_return));
+               parent_->resolver_->Reject(std::move(delayed_return));
             } else {
                if (std::holds_alternative<std::exception_ptr>(delayed_return)) {
-                  parent->resolver_->Reject(std::get<std::exception_ptr>(delayed_return));
+                  parent_->resolver_->Reject(std::get<std::exception_ptr>(delayed_return));
                } else {
                   assert(!WITH_RESOLVER && "Resolver promises must not return values");
-                  parent->resolver_->Resolve(std::move(*std::get<std::unique_ptr<T>>(delayed_return)
-                  ));
+                  parent_->resolver_->Resolve(std::move(*std::get<std::unique_ptr<T>>(delayed_return
+                  )));
                }
             }
          } else if constexpr (IS_VOID && !WITH_RESOLVER) {
-            parent->resolver_->Resolve();
+            parent_->resolver_->Resolve();
          } else {
             assert(IS_VOID && "Non-void promises must return a value or throw");
          }
