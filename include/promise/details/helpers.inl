@@ -81,27 +81,31 @@ namespace promise {
  *
  * @param promise Promises to await.
  *
- * @return Tuple of resolved values (std::monostate for void).
+ * @return Tuple of non void resolved values.
  */
 template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
-   return MakePromise(
-     [promise...]() mutable -> details::IPromise<std::tuple<std::conditional_t<
-                              std::is_void_v<return_t<PROMISE>>,
-                              std::monostate,
-                              return_t<PROMISE>>...>> {
-        co_return std::make_tuple(co_await [](auto&& promise) constexpr {
-           if constexpr (std::is_void_v<return_t<decltype(promise)>>) {
-              return std::forward<decltype(promise)>(promise).Then([]() constexpr {
-                 return std::monostate{};
-              });
-           } else {
-              return std::forward<decltype(promise)>(promise);
-           }
-        }(std::forward<PROMISE>(promise))...);
-     }
-   );
+   using RETURN = decltype(std::tuple_cat(std::declval<std::conditional_t<
+                                            std::is_void_v<return_t<PROMISE>>,
+                                            std::tuple<>,
+                                            std::tuple<return_t<PROMISE>>>>()...));
+
+   return MakePromise([promise...]() mutable -> details::IPromise<RETURN> {
+      co_return std::tuple_cat(co_await [](auto&& promise) constexpr {
+         if constexpr (std::is_void_v<return_t<decltype(promise)>>) {
+            return std::forward<decltype(promise)>(promise).Then([]() constexpr {
+               return std::tuple<>{};
+            });
+         } else {
+            return std::forward<decltype(promise)>(promise).Then(
+              [](return_t<decltype(promise)> const& value) constexpr {
+                 return std::make_tuple(value);
+              }
+            );
+         }
+      }(std::forward<PROMISE>(promise))...);
+   });
 }
 
 template <class V, class... TS>
