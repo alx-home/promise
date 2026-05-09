@@ -125,6 +125,10 @@ main() {
 
             std::cout << "Create " << co_await prom_create_wait << std::endl;
 
+            struct FinalyExc : public std::exception {
+               using std::exception::exception;
+            };
+
             auto prom_int{
               prom2
                 .Then([](int value) -> Promise<double> {
@@ -140,15 +144,43 @@ main() {
                    std::cout << "test caught" << std::endl;
                    co_return 300;
                 })
+                .Finally([]() { std::cout << "test finally" << std::endl; })
                 .Then([](std::variant<int, double> const& value) -> Promise<double> {
                    std::cout << "test2 uncaught" << std::endl;
                    throw std::runtime_error("test3");
                    co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
                                                                 : std::get<double>(value) + 8788;
                 })
+                .Finally([]() { std::cout << "test3 finally" << std::endl; })
                 .Catch([](std::exception_ptr) -> Promise<double> {
                    // throw std::runtime_error("test2");
                    std::cout << "test3 caught" << std::endl;
+                   co_return 300;
+                })
+                .Finally([]() { std::cout << "test3 finally" << std::endl; })
+                .Finally([]() {
+                   std::cout << "test3 finally" << std::endl;
+                   throw FinalyExc();
+                })
+                .Finally([]() { std::cout << "test4 finally" << std::endl; })
+                .Catch([](FinalyExc const&) -> Promise<double> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test4 caught" << std::endl;
+                   co_return 300;
+                })
+                .Then([](std::variant<int, double> const& value) -> Promise<double> {
+                   std::cout << "test5 uncaught" << std::endl;
+                   throw std::runtime_error("test5");
+                   co_return std::holds_alternative<int>(value) ? std::get<int>(value) + 3
+                                                                : std::get<double>(value) + 8788;
+                })
+                .Finally([]() {
+                   std::cout << "test5 finally" << std::endl;
+                   throw FinalyExc("test55");
+                })
+                .Catch([](FinalyExc const&) -> Promise<double> {
+                   // throw std::runtime_error("test2");
+                   std::cout << "test55 caught" << std::endl;
                    co_return 300;
                 })
                 .Then([](Resolve<int> const& resolve, double value) -> Promise<int, true> {
