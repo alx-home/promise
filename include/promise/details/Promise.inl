@@ -836,18 +836,18 @@ private:
             if constexpr (std::is_void_v<T>) {
                MakePromise(std::forward<FUN>(func))
                  .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); })
-                 .Catch([reject](std::exception_ptr exception) constexpr {
-                    (*reject)(std::move(exception));
-                 })
+                 .Catch([reject =
+                           std::forward<decltype(reject)>(reject)](std::exception_ptr exception
+                        ) constexpr { (*reject)(std::move(exception)); })
                  .Detach();
             } else {
                MakePromise(std::forward<FUN>(func))
                  .Then([resolve = std::move(resolve), value = value...[0]]() constexpr {
                     (*resolve)(value);
                  })
-                 .Catch([reject](std::exception_ptr exception) constexpr {
-                    (*reject)(std::move(exception));
-                 })
+                 .Catch([reject =
+                           std::forward<decltype(reject)>(reject)](std::exception_ptr exception
+                        ) constexpr { (*reject)(std::move(exception)); })
                  .Detach();
             }
          } else {
@@ -865,26 +865,27 @@ private:
          }
       };
 
-      auto apply_exception =
-        [](auto&& reject, auto&& func, std::exception_ptr exception) constexpr {
-           if constexpr (IS_PROMISE<FUN>) {
-              MakePromise(std::forward<FUN>(func))
-                .Then([reject, exception = std::move(exception)]() constexpr {
-                   (*reject)(exception);
-                })
-                .Catch([reject](std::exception_ptr exception) constexpr {
-                   (*reject)(std::move(exception));
-                })
-                .Detach();
-           } else {
-              try {
-                 func();
+      auto apply_exception = [](
+                               auto&& reject, auto&& func, std::exception_ptr exception
+                             ) constexpr {
+         if constexpr (IS_PROMISE<FUN>) {
+            MakePromise(std::forward<FUN>(func))
+              .Then([reject    = std::forward<decltype(reject)>(reject),
+                     exception = std::move(exception)]() constexpr {
                  (*reject)(std::move(exception));
-              } catch (...) {
-                 (*reject)(std::current_exception());
-              }
-           }
-        };
+              })
+              .Catch([reject = std::forward<decltype(reject)>(reject)](std::exception_ptr exception
+                     ) constexpr { (*reject)(std::move(exception)); })
+              .Detach();
+         } else {
+            try {
+               func();
+               (*reject)(std::move(exception));
+            } catch (...) {
+               (*reject)(std::current_exception());
+            }
+         }
+      };
 
       auto [promise, resolve, reject] = promise::Create<T>();
       if (std::unique_lock<std::shared_mutex> ulock{this->mutex_}; this->IsDone(ulock)) {
@@ -896,9 +897,9 @@ private:
             lock.unlock();
 
             if constexpr (IS_PROMISE<FUN>) {
-               apply_exception(reject, std::forward<FUN>(func), exception);
+               apply_exception(std::move(reject), std::forward<FUN>(func), exception);
             } else {
-               apply_exception(reject, std::forward<FUN>(func), exception);
+               apply_exception(std::move(reject), std::forward<FUN>(func), exception);
             }
          } else if constexpr (IS_VOID) {
             apply_value(std::move(resolve), std::move(reject), std::forward<FUN>(func));
@@ -906,7 +907,7 @@ private:
             auto const& value = this->GetValue(lock);
             lock.unlock();
 
-            apply_value(std::move(resolve), reject, std::forward<FUN>(func), value);
+            apply_value(std::move(resolve), std::move(reject), std::forward<FUN>(func), value);
          }
       } else {
          Await(
@@ -933,6 +934,12 @@ private:
                     apply_value(std::move(resolve), reject, std::move(func), value);
                  }
               } catch (...) {
+                 assert(
+                   false
+                   && "This shall not throw since we're already handling exceptions, but just in "
+                      "case..."
+                 );
+
                  if (lock.owns_lock()) {
                     lock.unlock();
                  }
