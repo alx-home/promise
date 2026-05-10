@@ -44,7 +44,7 @@ private:
    Reject(std::function<void(std::exception_ptr)> impl);
 
 public:
-   static constexpr std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl) {
+   static std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl) {
       struct MakeSharedEnabler : public Reject {
          MakeSharedEnabler(std::function<void(std::exception_ptr)> impl)
             : Reject(std::move(impl)) {}

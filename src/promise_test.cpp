@@ -354,29 +354,27 @@ main() {
                  });
             }
 
-            auto const prom_Create1 = MakePromise([] constexpr { return 42; });
+            auto const prom_Create1 = MakePromise([] { return 42; });
             std::cout << "prom_Create1 " << co_await prom_Create1 << std::endl;
 
-            auto const prom_Create2 =
-              MakePromise([](Resolve<int> const& resolve) constexpr { resolve(42); });
+            auto const prom_Create2 = MakePromise([](Resolve<int> const& resolve) { resolve(42); });
             std::cout << "prom_Create2 " << co_await prom_Create2 << std::endl;
 
-            auto const prom_Create3 =
-              MakePromise([](Resolve<int> const&, Reject const& reject) constexpr {
-                 reject.Apply<std::runtime_error>("test");
-              }).Catch([](std::runtime_error const& exception) constexpr {
-                 std::cout << "prom_Create3 exception: " << exception.what() << std::endl;
-              });
+            auto const prom_Create3 = MakePromise([](Resolve<int> const&, Reject const& reject) {
+                                         reject.Apply<std::runtime_error>("test");
+                                      }).Catch([](std::runtime_error const& exception) {
+               std::cout << "prom_Create3 exception: " << exception.what() << std::endl;
+            });
 
-            auto const prom_Create4 = MakePromise([](Resolve<int> const&) constexpr {
+            auto const prom_Create4 = MakePromise([](Resolve<int> const&) {
                                          throw std::runtime_error("test");
-                                      }).Catch([](std::runtime_error const& exception) constexpr {
+                                      }).Catch([](std::runtime_error const& exception) {
                std::cout << "prom_Create4 exception: " << exception.what() << std::endl;
             });
 
-            auto const prom_Create5 = MakePromise([]() constexpr {
+            auto const prom_Create5 = MakePromise([]() {
                                          throw std::runtime_error("test");
-                                      }).Catch([](std::runtime_error const& exception) constexpr {
+                                      }).Catch([](std::runtime_error const& exception) {
                std::cout << "prom_Create5 exception: " << exception.what() << std::endl;
             });
 

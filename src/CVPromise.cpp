@@ -30,10 +30,12 @@ CVPromise::CVPromise()
       return std::make_tuple(std::make_unique<WPromise<void>>(std::move(promise)), resolve, reject);
    }()) {}
 
-CVPromise::CVPromise(std::tuple<
-                     std::unique_ptr<WPromise<void>>,
-                     std::shared_ptr<promise::Resolve<void>>,
-                     std::shared_ptr<promise::Reject>>&& cv)
+CVPromise::CVPromise(
+  std::tuple<
+    std::unique_ptr<WPromise<void>>,
+    std::shared_ptr<promise::Resolve<void>>,
+    std::shared_ptr<promise::Reject>>&& cv
+)
    : promise_(std::move(std::get<0>(cv)))
    , resolve_(std::move(std::get<1>(cv)))
    , reject_(std::move(std::get<2>(cv))) {}
@@ -43,7 +45,8 @@ CVPromise::~CVPromise() {
    Reject<End>();
 }
 
-CVPromise::operator WPromise<void>() const {
+CVPromise::
+operator WPromise<void>() const {
    std::shared_lock lock{mutex_};
    return *promise_;
 }
@@ -68,7 +71,7 @@ CVPromise::operator->() const {
 
 void
 CVPromise::Notify() {
-   auto const resolve = [this] constexpr {
+   auto const resolve = [this] {
       std::shared_lock lock{mutex_};
       assert(resolve_);
       return resolve_;

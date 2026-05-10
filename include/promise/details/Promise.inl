@@ -424,7 +424,8 @@ private:
                      func(value, std::forward<ARGS>(args)...);
                      return details::WPromise<T2>::Resolve();
                   } else {
-                     return details::WPromise<T2>::Resolve(func(value, std::forward<ARGS>(args)...)
+                     return details::WPromise<T2>::Resolve(
+                       func(value, std::forward<ARGS>(args)...)
                      );
                   }
                }
@@ -492,7 +493,8 @@ private:
                        (*resolve)();
                     });
                  } else {
-                    return std::move(promise).Then([resolve = std::move(resolve)](T2 const& value
+                    return std::move(promise).Then([resolve = std::move(resolve)](
+                                                     T2 const& value
                                                    ) constexpr { (*resolve)(value); });
                  }
               }()
@@ -656,8 +658,9 @@ private:
                      using invoke_value_t = return_t<invoke_promise_t>;
 
                      return MakePromise(
-                       [ex, invoke = std::move(invoke)](
-                       ) mutable -> details::IPromise<invoke_value_t, false> {
+                       [ex,
+                        invoke =
+                          std::move(invoke)]() mutable -> details::IPromise<invoke_value_t, false> {
                           co_return co_await invoke(ex);
                        }
                      );
@@ -696,8 +699,9 @@ private:
                });
             }
          } else {
-            return std::move(promise).Then([resolve = std::move(resolve)](T2 const& value
-                                           ) constexpr { (*resolve)(value); });
+            return std::move(promise).Then(
+              [resolve = std::move(resolve)](T2 const& value) constexpr { (*resolve)(value); }
+            );
          }
       };
 
@@ -718,17 +722,19 @@ private:
                     })
                     .Detach();
                } else {
-                  if constexpr (std::is_void_v<std::invoke_result_t<
-                                  decltype(apply_exception),
-                                  decltype((exception))>>) {
+                  if constexpr (
+                    std::is_void_v<
+                      std::invoke_result_t<decltype(apply_exception), decltype((exception))>>
+                  ) {
                      apply_exception(exception);
                      (*resolve)();
                   } else {
                      (*resolve)(apply_exception(exception));
                   }
                }
-            } else if constexpr (std::is_void_v<
-                                   std::invoke_result_t<decltype(apply_value), decltype((lock))>>) {
+            } else if constexpr (
+              std::is_void_v<std::invoke_result_t<decltype(apply_value), decltype((lock))>>
+            ) {
                apply_value(lock);
                (*resolve)();
             } else {
@@ -752,15 +758,18 @@ private:
 
                        if constexpr (IS_PROMISE<FUN>) {
                           resolve_wrapper(apply_exception(exception), std::move(resolve))
-                            .Catch([reject = std::move(reject)](std::exception_ptr exception
-                                   ) constexpr { (*reject)(std::move(exception)); })
+                            .Catch([reject =
+                                      std::move(reject)](std::exception_ptr exception) constexpr {
+                               (*reject)(std::move(exception));
+                            })
                             .Detach();
                        } else {
                           (void)resolve_wrapper;
 
-                          if constexpr (std::is_void_v<std::invoke_result_t<
-                                          decltype(apply_exception),
-                                          decltype(exception)>>) {
+                          if constexpr (
+                            std::is_void_v<
+                              std::invoke_result_t<decltype(apply_exception), decltype(exception)>>
+                          ) {
                              apply_exception(exception);
                              (*resolve)();
                           } else {
@@ -768,9 +777,10 @@ private:
                           }
                        }
                     } else {
-                       if constexpr (std::is_void_v<std::invoke_result_t<
-                                       decltype(apply_value),
-                                       decltype((lock))>>) {
+                       if constexpr (
+                         std::is_void_v<
+                           std::invoke_result_t<decltype(apply_value), decltype((lock))>>
+                       ) {
                           apply_value(lock);
                           (*resolve)();
                        } else {
@@ -836,17 +846,18 @@ private:
             if constexpr (std::is_void_v<T>) {
                MakePromise(std::forward<FUN>(func))
                  .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); })
-                 .Catch([reject =
-                           std::forward<decltype(reject)>(reject)](std::exception_ptr exception
+                 .Catch([reject = std::forward<decltype(reject)>(reject)](
+                          std::exception_ptr exception
                         ) constexpr { (*reject)(std::move(exception)); })
                  .Detach();
             } else {
                MakePromise(std::forward<FUN>(func))
-                 .Then([resolve = std::move(resolve), value = value...[0]]() constexpr {
-                    (*resolve)(value);
+                 .Then([resolve = std::move(resolve),
+                        value   = std::tuple{std::forward<decltype(value)>(value)...}]() constexpr {
+                    (*resolve)(std::get<0>(value));
                  })
-                 .Catch([reject =
-                           std::forward<decltype(reject)>(reject)](std::exception_ptr exception
+                 .Catch([reject = std::forward<decltype(reject)>(reject)](
+                          std::exception_ptr exception
                         ) constexpr { (*reject)(std::move(exception)); })
                  .Detach();
             }
@@ -857,7 +868,7 @@ private:
                   (*resolve)();
                } else {
                   func();
-                  (*resolve)(value...[0]);
+                  (*resolve)(std::get<0>(std::tuple{std::forward<decltype(value)>(value)...}));
                }
             } catch (...) {
                (*reject)(std::current_exception());
@@ -865,27 +876,27 @@ private:
          }
       };
 
-      auto apply_exception = [](
-                               auto&& reject, auto&& func, std::exception_ptr exception
-                             ) constexpr {
-         if constexpr (IS_PROMISE<FUN>) {
-            MakePromise(std::forward<FUN>(func))
-              .Then([reject    = std::forward<decltype(reject)>(reject),
-                     exception = std::move(exception)]() constexpr {
+      auto apply_exception =
+        [](auto&& reject, auto&& func, std::exception_ptr exception) constexpr {
+           if constexpr (IS_PROMISE<FUN>) {
+              MakePromise(std::forward<FUN>(func))
+                .Then([reject    = std::forward<decltype(reject)>(reject),
+                       exception = std::move(exception)]() constexpr {
+                   (*reject)(std::move(exception));
+                })
+                .Catch([reject = std::forward<decltype(reject)>(reject)](
+                         std::exception_ptr exception
+                       ) constexpr { (*reject)(std::move(exception)); })
+                .Detach();
+           } else {
+              try {
+                 func();
                  (*reject)(std::move(exception));
-              })
-              .Catch([reject = std::forward<decltype(reject)>(reject)](std::exception_ptr exception
-                     ) constexpr { (*reject)(std::move(exception)); })
-              .Detach();
-         } else {
-            try {
-               func();
-               (*reject)(std::move(exception));
-            } catch (...) {
-               (*reject)(std::current_exception());
-            }
-         }
-      };
+              } catch (...) {
+                 (*reject)(std::current_exception());
+              }
+           }
+        };
 
       auto [promise, resolve, reject] = promise::Create<T>();
       if (std::unique_lock<std::shared_mutex> ulock{this->mutex_}; this->IsDone(ulock)) {
@@ -999,25 +1010,25 @@ private:
          return std::move(race_promise);
       }
 
-      auto const handle = [this, resolve, reject](std::shared_lock<std::shared_mutex>& lock
-                          ) constexpr {
-         auto const& exception = this->GetException(lock);
-         if (exception) {
-            lock.unlock();
-            (*reject)(exception);
-         } else if constexpr (std::is_void_v<T2>) {
-            lock.unlock();
-            (*resolve)();
-         } else if constexpr (IS_VOID) {
-            lock.unlock();
-            (*resolve)(std::nullopt);
-         } else {
-            auto const& value = this->GetValue(lock);
-            lock.unlock();
+      auto const handle =
+        [this, resolve, reject](std::shared_lock<std::shared_mutex>& lock) constexpr {
+           auto const& exception = this->GetException(lock);
+           if (exception) {
+              lock.unlock();
+              (*reject)(exception);
+           } else if constexpr (std::is_void_v<T2>) {
+              lock.unlock();
+              (*resolve)();
+           } else if constexpr (IS_VOID) {
+              lock.unlock();
+              (*resolve)(std::nullopt);
+           } else {
+              auto const& value = this->GetValue(lock);
+              lock.unlock();
 
-            (*resolve)(value);
-         }
-      };
+              (*resolve)(value);
+           }
+        };
       if (std::unique_lock ulock{this->mutex_}; this->IsDone(ulock)) {
          ulock.unlock();
          std::shared_lock lock{this->mutex_};
@@ -1160,8 +1171,7 @@ public:
 #if defined(__clang__)
    __attribute__((no_sanitize("address")))
 #endif
-   static constexpr auto
-   Create(FUN&& func, ARGS&&... args) {
+   static constexpr auto Create(FUN&& func, ARGS&&... args) {
 
       struct FunctionImpl : Function {
          /**
@@ -1190,8 +1200,10 @@ public:
 
       auto promise = [&]() constexpr {
          if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
-            if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
-                          && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>) {
+            if constexpr (
+              IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
+              && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>
+            ) {
                return holder->func_(*resolve, *reject, std::forward<ARGS>(args)...);
             } else if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
                return holder->func_(*resolve, std::forward<ARGS>(args)...);
