@@ -301,8 +301,8 @@ private:
       ++use_count_;
       this->cv_.notify_all();
 
-      std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
       awaiters_.emplace_back(h);
+      std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
    }
 
    /**
@@ -318,8 +318,8 @@ private:
       auto const id = ++use_count_;
       this->cv_.notify_all();
 
-      std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
       awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
+      std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
       return id;
    }
 
