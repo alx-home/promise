@@ -207,8 +207,9 @@ protected:
                   parent_->resolver_->Reject(std::get<std::exception_ptr>(delayed_return));
                } else {
                   assert(!WITH_RESOLVER && "Resolver promises must not return values");
-                  parent_->resolver_->Resolve(std::move(*std::get<std::unique_ptr<T>>(delayed_return
-                  )));
+                  parent_->resolver_->Resolve(
+                    std::move(*std::get<std::unique_ptr<T>>(delayed_return))
+                  );
                }
             }
          } else if constexpr (IS_VOID && !WITH_RESOLVER) {
@@ -353,7 +354,7 @@ public:
          std::vector<typename std::remove_cvref_t<SELF>::Awaiter> awaiters{};
 
          self.awaiters_.swap(awaiters);
-         assert(!self.awaiters_.size());
+         assert(self.awaiters_.empty());
 
          auto const save_self = std::move(self.self_owned_);
          lock.unlock();

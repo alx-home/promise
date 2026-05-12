@@ -71,7 +71,8 @@ Resolve<T>::operator()(T const& value) const {
  */
 template <class T>
    requires(!std::is_void_v<T>)
-Resolve<T>::operator bool() const {
+Resolve<T>::
+operator bool() const {
    return resolver_->await_ready();
 }
 
@@ -82,7 +83,9 @@ struct ResolverValue {
 };
 
 template <>
-struct ResolverValue<void> {};
+struct ResolverValue<void> {
+   bool value_is_set_{false};
+};
 
 template <class T>
 class Resolver
@@ -167,7 +170,10 @@ public:
               assert(promise);
               std::unique_lock lock{promise->mutex_};
 
+              assert(!ResolverValue<T>::value_is_set_);
               assert(!exception_);
+              ResolverValue<T>::value_is_set_ = true;
+
               assert(promise);
               promise->OnResolved(lock);
               return true;
@@ -203,7 +209,9 @@ public:
               assert(promise);
               std::unique_lock lock{promise->mutex_};
 
-              if constexpr (!std::is_void_v<T>) {
+              if constexpr (std::is_void_v<T>) {
+                 assert(!ResolverValue<T>::value_is_set_);
+              } else {
                  assert(!ResolverValue<T>::value_);
               }
               assert(!exception_);

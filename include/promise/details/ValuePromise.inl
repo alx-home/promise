@@ -118,7 +118,7 @@ public:
    bool IsResolved(this SELF&& self, Lock lock) {
       (void)lock;
       assert(self.resolver_);
-      return self.resolver_->await_ready() && (self.resolver_->exception_ == nullptr);
+      return self.resolver_->value_is_set_;
    }
 };
 
