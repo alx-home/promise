@@ -72,7 +72,8 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   auto const& GetValue(this SELF&& self, [[gnu::unused]] Lock lock) {
+   auto const& GetValue(this SELF&& self, Lock lock) {
+      (void)lock;
       assert(self.resolver_);
       assert(self.resolver_->value_);
       return *self.resolver_->value_;
@@ -99,7 +100,8 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   bool IsResolved(this SELF&& self, [[gnu::unused]] Lock lock) {
+   bool IsResolved(this SELF&& self, Lock lock) {
+      (void)lock;
       assert(self.resolver_);
       return self.resolver_->value_ != nullptr;
    }
@@ -113,7 +115,8 @@ public:
     */
    template <class SELF>
       requires(IS_VOID)
-   bool IsResolved(this SELF&& self, [[gnu::unused]] Lock lock) {
+   bool IsResolved(this SELF&& self, Lock lock) {
+      (void)lock;
       assert(self.resolver_);
       return self.resolver_->await_ready() && (self.resolver_->exception_ == nullptr);
    }

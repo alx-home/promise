@@ -271,7 +271,7 @@ main() {
 
             std::cout << "prom_catch_asyn " << *(co_await prom_catch_asyn) << std::endl;
             {
-               auto [prom_race_delay, resolve, _] = Promise<void>::Create();
+               auto [prom_race_delay, resolve2, _] = Promise<void>::Create();
                auto prom_race1 = MakePromise([&prom_race_delay]() -> Promise<double> {
                   co_await prom_race_delay;
                   throw std::runtime_error("test race1");
@@ -300,7 +300,7 @@ main() {
                          }
                       }
                    });
-               (*resolve)();
+               (*resolve2)();
 
                co_await promise::All(prom_race1, prom_race2, prom_race3)
                  .Catch([](std::runtime_error const& exception) {
