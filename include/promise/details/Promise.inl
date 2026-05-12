@@ -139,7 +139,7 @@ public:
     */
    bool await_ready() {
       std::shared_lock lock{this->mutex_};
-      return Ready(lock);
+      return this->IsDone(lock);
    }
 
    /**
@@ -150,7 +150,7 @@ public:
    bool await_suspend(std::coroutine_handle<> h) {
       std::unique_lock lock{this->mutex_};
 
-      if (Ready(lock)) {
+      if (this->IsDone(lock)) {
          return false;
       }
 
@@ -255,8 +255,9 @@ private:
           * @brief Resume the await and destroy the wrapper.
           */
          void await_resume() final {
-            // Delete this After resume
-            std::unique_ptr<Awaitable> self_ptr(this);
+            // Ensure the wrapper is destroyed after resuming
+            std::unique_ptr<Awaitable> self{this};
+
             self_.await_resume();
          }
 
@@ -265,10 +266,7 @@ private:
           *
           * @param h Awaiting coroutine handle.
           */
-         bool await_suspend(std::coroutine_handle<> h) final {
-            self_.await_suspend(h);
-            return true;
-         }
+         bool await_suspend(std::coroutine_handle<> h) final { return self_.await_suspend(h); }
 
       private:
          details::Promise<T, WITH_RESOLVER>& self_;
@@ -363,21 +361,6 @@ private:
     * @return Total number of awaiter registrations.
     */
    std::size_t UseCount() const noexcept { return use_count_; }
-
-   /**
-    * @brief Check whether the promise is ready.
-    *
-    * @param lock Active lock for thread-safe access.
-    *
-    * @return True if ready to resume.
-    */
-   bool Ready(Lock lock) {
-      if (this->GetException(lock)) {
-         return true;
-      }
-
-      return this->IsResolved(lock);
-   }
 
    /**
     * @brief Chain a continuation to run on resolve.
