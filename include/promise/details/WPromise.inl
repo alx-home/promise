@@ -74,7 +74,7 @@ public:
    }
 
    template <class FUN>
-      requires(IS_PROMISE_FUNCTION<FUN>)
+      requires(function_constructible<FUN>)
    WPromise(FUN&& fun)
       : WPromise(MakePromise(std::forward<FUN>(fun))) {}
 
@@ -591,8 +591,28 @@ private:
 };
 
 template <class FUN>
-   requires(IS_PROMISE_FUNCTION<FUN>)
-WPromise(FUN&& fun) -> WPromise<return_t<return_t<FUN>>>;
+   requires(function_constructible<FUN> && IS_PROMISE_FUNCTION<FUN>)
+WPromise(FUN&& fun) -> WPromise<return_or_void_t<return_t<FUN>>>;
+
+template <class FUN, class = void>
+struct WReturnHelper;
+
+template <class FUN>
+struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> == 0>> {
+   using type = return_t<FUN>;
+};
+
+template <class FUN>
+struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> >= 1>> {
+   using type = std::conditional_t<
+     IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>,
+     promise::RESOLVE_TYPE<std::tuple_element_t<0, all_args_t<FUN>>>,
+     return_t<FUN>>;
+};
+
+template <class FUN>
+   requires(function_constructible<FUN> && !IS_PROMISE_FUNCTION<FUN>)
+WPromise(FUN&& fun) -> WPromise<typename WReturnHelper<FUN>::type>;
 
 /**
  * @brief Promise handle that owns shared state and supports co_await.
