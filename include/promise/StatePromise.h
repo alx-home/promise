@@ -45,6 +45,8 @@ public:
    void Done();
    void Reset();
 
+   bool IsDone() const;
+
 private:
    CVPromise done_promise_;
    CVPromise ready_promise_;

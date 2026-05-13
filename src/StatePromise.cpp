@@ -62,6 +62,11 @@ StatePromise::Done() {
    }
 }
 
+bool
+StatePromise::IsDone() const {
+   return done_promise_->Rejected() && ready_promise_->Rejected();
+}
+
 void
 StatePromise::Reset() {
    ready_promise_.Reset();
