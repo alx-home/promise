@@ -230,6 +230,22 @@ protected:
          delayed_return_ = std::current_exception();
       }
 
+      template <class FUN>
+         requires(IS_PROMISE_FUNCTION<FUN>)
+      details::WPromise<return_t<return_t<FUN>>> await_transform(FUN&& fun) {
+         // If the awaitable is a promise function, we create a new promise for it and return it as
+         // an awaitable.
+         return std::forward<FUN>(fun);
+      }
+
+      template <class FUN>
+         requires(!IS_PROMISE_FUNCTION<FUN>)
+      auto&& await_transform(FUN&& fun) {
+         // If the await_transform is not a promise function, we just forward it as a normal
+         // awaitable.
+         return std::forward<FUN>(fun);
+      }
+
       friend Promise;
       friend Handle;
 

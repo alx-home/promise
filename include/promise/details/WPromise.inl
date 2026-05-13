@@ -30,6 +30,7 @@ SOFTWARE.
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <type_traits>
 #include <variant>
 
 namespace promise::details {
@@ -71,6 +72,11 @@ public:
         details_
       );
    }
+
+   template <class FUN>
+      requires(IS_PROMISE_FUNCTION<FUN>)
+   WPromise(FUN&& fun)
+      : WPromise(MakePromise(std::forward<FUN>(fun))) {}
 
    class VAwaitable : public VPromise::Awaitable {
    public:
@@ -583,6 +589,10 @@ private:
    template <class, bool>
    friend class ::promise::details::Promise;
 };
+
+template <class FUN>
+   requires(IS_PROMISE_FUNCTION<FUN>)
+WPromise(FUN&& fun) -> WPromise<return_t<return_t<FUN>>>;
 
 /**
  * @brief Promise handle that owns shared state and supports co_await.
