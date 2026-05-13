@@ -283,4 +283,23 @@ struct all_args_<std::function<T(ARGS...)>> {
 template <class FUN>
 using all_args_t = typename all_args_<std::remove_cvref_t<FUN>>::type;
 
+template <class FUN, class = void>
+struct WReturnHelper;
+
+template <class FUN>
+struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> == 0>> {
+   using type = return_t<FUN>;
+};
+
+template <class FUN>
+struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> >= 1>> {
+   using type = std::conditional_t<
+     IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>,
+     promise::RESOLVE_TYPE<std::tuple_element_t<0, all_args_t<FUN>>>,
+     return_t<FUN>>;
+};
+
+template <class FUN>
+using WReturn = typename WReturnHelper<std::remove_cvref_t<FUN>>::type;
+
 }  // namespace promise

@@ -226,6 +226,23 @@ main() {
                 .Then([]() -> Promise<int> { co_return 888; })
             };
 
+            auto all = promise::All(
+              [] -> Promise<int> { co_return 1; },
+              [] -> Promise<void> { co_return; },
+              [] -> Promise<int> { co_return 2; }
+            );
+
+            std::cout << "All " << std::get<0>(co_await all) << " " << std::get<1>(co_await all)
+                      << std::endl;
+
+            auto raced = promise::Race(
+              []() -> Promise<int> { co_return 1; }, []() -> Promise<double> { co_return 2.5; }
+            );
+
+            std::visit(
+              [](auto const& value) { std::cout << "Race " << value << std::endl; }, co_await raced
+            );
+
             auto prom_ptr = WPromise{[&]() -> Promise<void> {
                                co_await prom4;
                                std::cout << "ok prom_ptr" << std::endl;

@@ -32,7 +32,6 @@ SOFTWARE.
 #include <cassert>
 #include <exception>
 #include <functional>
-#include <memory>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -76,6 +75,7 @@ MakeReject(promise::Reject const& reject, ARGS&&... args) {
 }
 
 namespace promise {
+namespace details {
 /**
  * @brief Await all promises and return a combined result.
  *
@@ -112,6 +112,27 @@ All(PROMISE&&... promise) {
    );
 }
 
+}  // namespace details
+
+/**
+ * @brief Await all promises and return a combined result.
+ *
+ * @param promise Promises to await.
+ *
+ * @return Tuple of non void resolved values.
+ */
+template <class... PROMISE>
+static constexpr auto
+All(PROMISE&&... promise) {
+   return details::All([]<class PROMISE2>(PROMISE2&& promise) constexpr {
+      if constexpr (IS_WPROMISE<std::remove_cvref_t<PROMISE2>>) {
+         return std::forward<PROMISE2>(promise);
+      } else {
+         return MakePromise(std::forward<PROMISE2>(promise));
+      }
+   }(std::forward<PROMISE>(promise))...);
+}
+
 template <class V, class... TS>
 struct UniqueVariantHelper;
 
@@ -139,6 +160,7 @@ struct UniqueVariantHelper<V> {
 template <typename... TS>
 using unique_variant = typename UniqueVariantHelper<std::variant<>, TS...>::type;
 
+namespace details {
 /**
  * @brief Await the first promise to resolve and return its result.
  *
@@ -149,8 +171,6 @@ using unique_variant = typename UniqueVariantHelper<std::variant<>, TS...>::type
 template <class... PROMISES>
 static constexpr auto
 Race(PROMISES&&... promise) {
-   static_assert(sizeof...(PROMISES) > 0, "Race cannot be called with zero promises !");
-
    static constexpr auto IS_VOID  = (std::is_void_v<return_t<PROMISES>> && ...);
    static constexpr auto HAS_VOID = (std::is_void_v<return_t<PROMISES>> || ...);
 
@@ -183,6 +203,28 @@ Race(PROMISES&&... promise) {
     ...);
 
    return std::move(race_promise);
+}
+}  // namespace details
+
+/**
+ * @brief Await the first promise to resolve and return its result.
+ *
+ * @param promise Promises to await.
+ *
+ * @return Variant of resolved values (std::optional if any promise is void).
+ */
+template <class... PROMISES>
+static constexpr auto
+Race(PROMISES&&... promise) {
+   static_assert(sizeof...(PROMISES) > 0, "Race cannot be called with zero promises !");
+
+   return details::Race([]<class PROMISE2>(PROMISE2&& promise) constexpr {
+      if constexpr (IS_WPROMISE<std::remove_cvref_t<PROMISE2>>) {
+         return std::forward<PROMISE2>(promise);
+      } else {
+         return MakePromise(std::forward<PROMISE2>(promise));
+      }
+   }(std::forward<PROMISES>(promise))...);
 }
 
 }  // namespace promise
