@@ -47,7 +47,10 @@ Reject::operator()(std::exception_ptr exception) const {
    return false;
 }
 
-Reject::operator bool() const { return rejected_; }
+Reject::
+operator bool() const {
+   return rejected_;
+}
 
 Resolve<void>::Resolve(std::shared_ptr<Resolver<void>> resolver)
    : resolver_(std::move(resolver)) {}
@@ -57,6 +60,9 @@ Resolve<void>::operator()() const {
    return resolver_->Resolve();
 }
 
-Resolve<void>::operator bool() const { return resolver_->await_ready(); }
+Resolve<void>::
+operator bool() const {
+   return resolver_->Done();
+}
 
 }  // namespace promise

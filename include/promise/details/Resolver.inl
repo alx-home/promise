@@ -119,12 +119,13 @@ public:
     * @brief Check if the resolver is already resolved.
     * @return True if already resolved, false otherwise.
     */
-   bool await_ready() const { return resolved_.load(); }
-
-   /**
-    * @brief Resume the await (no value to return).
-    */
-   void await_resume() const {}
+   bool Done() const {
+      if constexpr (std::is_void_v<T>) {
+         return this->value_is_set_;
+      } else {
+         return this->value_ != nullptr;
+      }
+   }
 
    /**
     * @brief Resolve the promise with a value.
@@ -141,7 +142,7 @@ public:
               assert(promise);
               std::unique_lock lock{promise->mutex_};
 
-              assert(!ResolverValue<T>::value_);
+              assert(!Done());
               assert(!exception_);
               ResolverValue<T>::value_ = std::make_unique<T>(std::forward<TT>(value));
 
@@ -209,11 +210,7 @@ public:
               assert(promise);
               std::unique_lock lock{promise->mutex_};
 
-              if constexpr (std::is_void_v<T>) {
-                 assert(!ResolverValue<T>::value_is_set_);
-              } else {
-                 assert(!ResolverValue<T>::value_);
-              }
+              assert(!Done());
               assert(!exception_);
               exception_ = std::move(exception);
 
