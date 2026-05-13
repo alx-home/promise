@@ -38,7 +38,7 @@ SOFTWARE.
 
 WPromise<void>
 Test() {
-   return MakePromise([]() -> Promise<void> { throw std::runtime_error("TEST_EXCEPTION"); });
+   return []() -> Promise<void> { throw std::runtime_error("TEST_EXCEPTION"); };
 }
 
 #ifdef _WIN32
@@ -62,7 +62,7 @@ main() {
 #endif  // DEBUG
 
    {
-      auto main_prom{MakePromise([]() -> Promise<void> {
+      WPromise main_prom{[]() -> Promise<void> {
          try {
             co_await Test();
          } catch (std::exception const& e) {
@@ -73,7 +73,7 @@ main() {
             std::shared_ptr<Resolve<int> const> resolver{};
             std::shared_ptr<Reject const>       rejecter{};
 
-            auto prom{MakePromise(
+            WPromise prom{
               [&resolver,
                &rejecter](Resolve<int> const& resolve, Reject const& reject) -> Promise<int, true> {
                  resolver = resolve.shared_from_this();
@@ -81,16 +81,16 @@ main() {
                  //   MakeReject<std::runtime_error>(*rejecter, "tutu");
                  co_return;
               }
-            )};
+            };
 
-            auto prom2{MakePromise([&]() -> Promise<int> {
+            WPromise prom2{[&]() -> Promise<int> {
                auto const result = ((co_await prom) + 1);
                // throw std::runtime_error("test");
                co_return result;
-            })};
+            }};
 
             auto prom_catch_through{
-              MakePromise([&]() -> Promise<int> { co_return 0; })
+              WPromise{[&]() -> Promise<int> { co_return 0; }}
                 .Then([](int value) -> Promise<int> { co_return value + 3; })
                 .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
                 .Then([](std::optional<int> const&) -> Promise<int> { co_return 0; })
@@ -103,7 +103,7 @@ main() {
                 .Then([]() -> Promise<int> { co_return 800; }),
             };
             auto prom_catch_through2{
-              MakePromise([&]() -> Promise<int> { co_return 0; })
+              WPromise{[&]() -> Promise<int> { co_return 0; }}
                 .Then([](int value) { return value + 3; })
                 .Catch([](std::exception_ptr) {})
                 .Then([](std::optional<int> const&) { return 0; })
@@ -118,9 +118,9 @@ main() {
 
             auto [prom_Create, resolve, reject] = promise::Create<int>();
 
-            auto prom_create_wait{MakePromise([&prom_Create]() -> Promise<int> {
+            WPromise prom_create_wait{[&prom_Create]() -> Promise<int> {
                co_return co_await prom_Create;
-            })};
+            }};
             (*resolve)(888);
 
             std::cout << "Create " << co_await prom_create_wait << std::endl;
@@ -190,21 +190,19 @@ main() {
                 })
             };
 
-            auto prom3{
-              MakePromise([&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
-                 try {
-                    [[maybe_unused]] auto result = resolve((co_await prom2) + 5);
-                    assert(result);
-                 } catch (std::runtime_error const& e) {
-                    std::cout << "PP3 " << e.what() << std::endl;
-                    throw;
-                 }
-                 co_return;
-              })
-            };
+            WPromise prom3{[&](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
+               try {
+                  [[maybe_unused]] auto result = resolve((co_await prom2) + 5);
+                  assert(result);
+               } catch (std::runtime_error const& e) {
+                  std::cout << "PP3 " << e.what() << std::endl;
+                  throw;
+               }
+               co_return;
+            }};
 
             auto prom4{
-              MakePromise([]() -> Promise<int> { co_return 999; })
+              WPromise{[]() -> Promise<int> { co_return 999; }}
                 .Then([](int value) -> Promise<void> {
                    std::cout << value << std::endl;
                    co_return;
@@ -228,13 +226,13 @@ main() {
                 .Then([]() -> Promise<int> { co_return 888; })
             };
 
-            auto prom_ptr = MakePromise([&]() -> Promise<void> {
+            auto prom_ptr = WPromise{[&]() -> Promise<void> {
                                co_await prom4;
                                std::cout << "ok prom_ptr" << std::endl;
                                co_return;
-                            }).ToPointer();
+                            }}.ToPointer();
 
-            auto promall{MakePromise([&]() -> Promise<void> {
+            WPromise promall{[&]() -> Promise<void> {
                auto const [res1, res2, res3, res4, int_, catch_through, catch_through2] =
                  co_await promise::All(
                    prom, prom2, prom3, prom4, prom_int, prom_catch_through, prom_catch_through2
@@ -245,23 +243,22 @@ main() {
                          << catch_through << " " << catch_through2 << std::endl;
 
                co_return;
-            })};
+            }};
 
-            MakePromise([&]() -> Promise<void> {
+            WPromise{[&]() -> Promise<void> {
                co_await promall;
                std::cout << "ok" << std::endl;
                co_return;
-            }).Detach();
+            }}.Detach();
 
-            auto const prom_catch_asyn{
-              MakePromise([&]() -> Promise<void> {
+            auto const prom_catch_asyn =
+              WPromise{[&]() -> Promise<void> {
                  throw std::runtime_error("test async");
                  co_return;
-              }).Catch([&](std::runtime_error const& exc) -> Promise<std::string> {
+              }}.Catch([&](std::runtime_error const& exc) -> Promise<std::string> {
                  co_await promall;
                  co_return exc.what();
-              })
-            };
+              });
 
             std::this_thread::sleep_for(std::chrono::seconds(1));
             // MakeReject<std::runtime_error>(*rejecter, "titi");
@@ -272,19 +269,19 @@ main() {
             std::cout << "prom_catch_asyn " << *(co_await prom_catch_asyn) << std::endl;
             {
                auto [prom_race_delay, resolve2, _] = Promise<void>::Create();
-               auto prom_race1 = MakePromise([&prom_race_delay]() -> Promise<double> {
+               WPromise prom_race1{[&prom_race_delay]() -> Promise<double> {
                   co_await prom_race_delay;
                   throw std::runtime_error("test race1");
                   co_return 2;
-               });
-               auto prom_race2 = MakePromise([&prom_race_delay]() -> Promise<double> {
+               }};
+               WPromise prom_race2{[&prom_race_delay]() -> Promise<double> {
                   co_await prom_race_delay;
                   co_return 2;
-               });
-               auto prom_race3 = MakePromise([&prom_race_delay]() -> Promise<int> {
+               }};
+               WPromise prom_race3{[&prom_race_delay]() -> Promise<int> {
                   co_await prom_race_delay;
                   co_return 3;
-               });
+               }};
 
                auto prom_race4 =
                  promise::Race(prom_race1, prom_race2, prom_race3)
@@ -309,9 +306,9 @@ main() {
             }
 
             {
-               auto prom_race1 = MakePromise([]() -> Promise<int> { co_return 1; });
-               auto prom_race2 = MakePromise([]() -> Promise<double> { co_return 2; });
-               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+               WPromise prom_race1{[]() -> Promise<int> { co_return 1; }};
+               WPromise prom_race2{[]() -> Promise<double> { co_return 2; }};
+               WPromise prom_race3{[]() -> Promise<int> { co_return 3; }};
 
                co_await promise::Race(prom_race1, prom_race2, prom_race3)
                  .Then([](std::variant<int, double> const& value) {
@@ -325,12 +322,12 @@ main() {
                co_await promise::All(prom_race1, prom_race2, prom_race3);
             }
             {
-               auto prom_race1 = MakePromise([]() -> Promise<int> { co_return 1; });
-               auto prom_race2 = MakePromise([]() -> Promise<double> {
+               WPromise prom_race1{[]() -> Promise<int> { co_return 1; }};
+               WPromise prom_race2{[]() -> Promise<double> {
                   throw std::runtime_error("test race3");
                   co_return 2;
-               });
-               auto prom_race3 = MakePromise([]() -> Promise<int> { co_return 3; });
+               }};
+               WPromise prom_race3{[]() -> Promise<int> { co_return 3; }};
 
                co_await promise::Race(prom_race1, prom_race2, prom_race3)
                  .Catch([](std::runtime_error const& exception) {
@@ -354,27 +351,27 @@ main() {
                  });
             }
 
-            auto const prom_Create1 = MakePromise([] { return 42; });
+            WPromise const prom_Create1{[] { return 42; }};
             std::cout << "prom_Create1 " << co_await prom_Create1 << std::endl;
 
-            auto const prom_Create2 = MakePromise([](Resolve<int> const& resolve) { resolve(42); });
+            WPromise const prom_Create2{[](Resolve<int> const& resolve) { resolve(42); }};
             std::cout << "prom_Create2 " << co_await prom_Create2 << std::endl;
 
-            auto const prom_Create3 = MakePromise([](Resolve<int> const&, Reject const& reject) {
+            auto const prom_Create3 = WPromise{[](Resolve<int> const&, Reject const& reject) {
                                          reject.Apply<std::runtime_error>("test");
-                                      }).Catch([](std::runtime_error const& exception) {
+                                      }}.Catch([](std::runtime_error const& exception) {
                std::cout << "prom_Create3 exception: " << exception.what() << std::endl;
             });
 
-            auto const prom_Create4 = MakePromise([](Resolve<int> const&) {
+            auto const prom_Create4 = WPromise{[](Resolve<int> const&) {
                                          throw std::runtime_error("test");
-                                      }).Catch([](std::runtime_error const& exception) {
+                                      }}.Catch([](std::runtime_error const& exception) {
                std::cout << "prom_Create4 exception: " << exception.what() << std::endl;
             });
 
-            auto const prom_Create5 = MakePromise([]() {
+            auto const prom_Create5 = WPromise{[]() {
                                          throw std::runtime_error("test");
-                                      }).Catch([](std::runtime_error const& exception) {
+                                      }}.Catch([](std::runtime_error const& exception) {
                std::cout << "prom_Create5 exception: " << exception.what() << std::endl;
             });
 
@@ -388,7 +385,7 @@ main() {
          }
 
          co_return;
-      })};
+      }};
 
       assert(main_prom.Done());
    }
