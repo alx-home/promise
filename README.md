@@ -18,7 +18,7 @@ control, while keeping the ergonomics of JS Promises in modern C++.
 - Helpers: `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()`.
 - Works with both coroutine and non-coroutine callables passed to `MakePromise`.
 - `CVPromise` helper for condition-variable-style async notification.
-- `StatePromise` helper for ready/done state signaling across coroutines.
+- `StatePromise` helper for ready/done state signaling across coroutines, including `IsDone()`.
 - `promise::Pool<SIZE>` and `promise::MessageQueue` for dispatching work onto worker threads.
 - State inspection via `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()`, `Awaiters()`, and `UseCount()`.
 - Optional leak detection via `PROMISE_MEMCHECK`.
@@ -57,31 +57,56 @@ If a function returns a promise handle (not a coroutine), use `WPromise<T>`.
 There is no way in C++ to distinguish a function returning a promise from a coroutine promise
 type in the signature alone, so `Promise<T>` is reserved for coroutine return types.
 
+## `MakePromise` scope and coroutine lambda rule
+
+Use `MakePromise(...)` as the boundary that creates and owns async work from callables/lambdas.
+In practice, `[]() -> Promise<T> { ... }` coroutine lambdas should not be used standalone outside
+`MakePromise(...)` or a `WPromise<T>` wrapper.
+
+Exception: inside a coroutine that already returns `Promise<U>`, you can `co_await` a function that
+returns a promise. The await flow is handled by promise awaitables and the resulting state is
+managed through `WPromise` internals.
+
+```cpp
+#include <promise/promise.h>
+
+// Allowed form 1: wrap coroutine lambdas with MakePromise.
+auto wrapped1 = MakePromise([]() -> Promise<int> { co_return 42; });
+
+// Allowed form 2: wrap coroutine lambdas with WPromise.
+WPromise wrapped2{[]() -> Promise<int> {
+	co_return 42;
+}};
+
+// Invalid: raw standalone coroutine lambda returning Promise (will not work as expected).
+// auto raw = []() -> Promise<int> { co_return 42; };
+```
+
 ## Basic usage
 
 ```cpp
 #include <promise/promise.h>
 #include <stdexcept>
 
-auto GetAnswer = MakePromise([] -> Promise<int> {
-	co_return 42;
-});
+WPromise GetAnswer {[] -> Promise<int> { 
+	co_return 42; 
+}};
 
-// Returning a promise handle (not a coroutine) uses WPromise<T>.
-WPromise<int> FetchCachedOrAsync(bool use_cache) {
+// Returning a promise handle (not a coroutine) uses WPromise.
+WPromise FetchCachedOrAsync(bool use_cache) {
 	if (use_cache) {
 		return Promise<int>::Resolve(42);
 	}
-
-	return MakePromise([]() -> Promise<int> { co_return 42; });
+	return []() -> Promise<int> { co_return 42; };
 }
 
-auto Demo = MakePromise([]() -> Promise<void> {
-   auto result = co_await GetAnswer();
 
-   auto chained = MakePromise([=]() -> Promise<int> {
+WPromise Demo {[]() -> Promise<void> {
+	auto result = co_await GetAnswer();
+
+   auto chained = WPromise{[=]() -> Promise<int> {
                      co_return result + 1;
-                  })
+                  }}
                   .Then([](int value)  { return value * 2; })
                   .Then([](int value) -> Promise<int> { co_return value / 2; })
                   .Then([](int value) -> WPromise<int> {
@@ -94,7 +119,7 @@ auto Demo = MakePromise([]() -> Promise<void> {
                      // value is std::optional<int> because Catch returned void
                      co_return value.value_or(-1);
                   });
-});
+}};
 ```
 
 ## Quick Card
@@ -108,17 +133,26 @@ auto [created, resolve, reject] = promise::Create<int>();
 resolve->operator()(7);
 
 auto all = promise::All(
-	MakePromise([]() -> Promise<int> { co_return 1; }),
-	MakePromise([]() -> Promise<int> { co_return 2; })
+	[]() -> Promise<int> { co_return 1; },
+	[]() -> Promise<void> { co_return; },
+	[]() -> Promise<int> { co_return 2; }
 );
+
+auto [a, b] = co_await all; // void result is awaited but not present in tuple
 
 auto raced = promise::Race(
-	MakePromise([]() -> Promise<int> { co_return 1; }),
-	MakePromise([]() -> Promise<double> { co_return 2.5; })
+	[]() -> Promise<int> { co_return 1; },
+	[]() -> Promise<double> { co_return 2.5; }
 );
 
-auto prom = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
+
+WPromise prom{[](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
 	MakeReject<std::runtime_error>(reject, "failed");
+	co_return;
+}};
+
+auto prom = MakePromise([](Resolve<int> const& resolve) -> Promise<int, true> {
+	resolve(123);
 	co_return;
 });
 
@@ -127,12 +161,14 @@ auto [prom2, resolve2, reject2] = MakeRPromise(
 );
 (*resolve2)(123);
 
+
 auto ok = Promise<int>::Resolve(5);
 auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
 auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
 
 StatePromise state;
 state.Ready();
+[[maybe_unused]] auto done = state.IsDone();
 ```
 
 ## Forwarding arguments into `MakePromise`
@@ -183,11 +219,12 @@ Example: safe value capture from a local scope
 ```cpp
 #include <promise/promise.h>
 
-WPromise<std::string> MakeGreeting() {
+
+WPromise MakeGreeting() {
 	std::string name = "Alex";
-	return MakePromise([=]() -> Promise<std::string> {
+	return [=]() -> Promise<std::string> {
 		co_return "Hello, " + name;
-	});
+	};
 }
 
 auto greeting = co_await MakeGreeting();
@@ -199,11 +236,11 @@ Example: move-only capture kept alive through the chain
 #include <memory>
 #include <promise/promise.h>
 
-WPromise<int> UseResource() {
+WPromise UseResource() {
 	auto resource = std::make_unique<int>(7);
-	return MakePromise([res = std::move(resource)]() mutable -> Promise<int> {
+	return [res = std::move(resource)]() mutable -> Promise<int> {
 		co_return *res + 1;
-	});
+	};
 }
 
 auto value = co_await UseResource();
@@ -218,10 +255,10 @@ Use `Promise<T, true>` when the resolver should be passed into the coroutine.
 ```cpp
 #include <promise/promise.h>
 
-auto prom = MakePromise([](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
+WPromise prom{[](Resolve<int> const& resolve, Reject const&) -> Promise<int, true> {
 	resolve(123);
 	co_return;
-});
+}};
 
 auto value = co_await prom;
 ```
@@ -232,7 +269,7 @@ Reject convenience helpers:
 #include <promise/promise.h>
 #include <stdexcept>
 
-auto prom2 = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
+WPromise prom2 {[](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
 	static constexpr bool REJECT_WITH_EXCEPTION = true;
 
 	if constexpr (REJECT_WITH_EXCEPTION) {
@@ -241,7 +278,7 @@ auto prom2 = MakePromise([](Resolve<int> const&, Reject const& reject) -> Promis
 		reject.Apply<std::runtime_error>("failed");
 	}
 	co_return;
-});
+}};
 ```
 
 `MakeReject<EXCEPTION>(reject, ...)` is relaxed by default. If the promise is already rejected,
@@ -312,14 +349,14 @@ auto value = co_await prom;
 std::shared_ptr<Resolve<int>> resolver;
 std::shared_ptr<Reject> rejecter;
 
-auto prom = MakePromise([
+WPromise prom {[
 	&resolver,
 	&rejecter
 ](Resolve<int> const& resolve, Reject const& reject) -> Promise<int, true> {
 	resolver = resolve.shared_from_this();
 	rejecter = reject.shared_from_this();
 	co_return;
-});
+}};
 
 // Later, from outside the coroutine body:
 [[maybe_unused]] auto ok = (*resolver)(42);
@@ -340,9 +377,17 @@ Use `promise::All(...)` to await every promise and collect all results in a tupl
 #include <promise/promise.h>
 #include <variant>
 
+auto all = promise::All(
+	[]() -> Promise<int> { co_return 10; },
+	[]() -> Promise<void> { co_return; },
+	[]() -> Promise<double> { co_return 2.5; }
+);
+
+auto [i, d] = co_await all; // std::tuple<int, double>
+
 auto first = promise::Race(
-	MakePromise([]() -> Promise<int> { co_return 1; }),
-	MakePromise([]() -> Promise<double> { co_return 2.5; })
+	[]() -> Promise<int> { co_return 1; },
+	[]() -> Promise<double> { co_return 2.5; }
 );
 
 auto value = co_await first; // std::variant<int, double>
@@ -351,7 +396,7 @@ auto value = co_await first; // std::variant<int, double>
 Return-type rules for `All`:
 
 - `co_await promise::All(...)` yields a tuple of each resolved value.
-- If one of the awaited promises returns `void`, its tuple slot becomes `std::monostate`.
+- Promises returning `void` are still awaited, but do not contribute a tuple slot.
 
 Return-type rules for `Race`:
 
@@ -371,14 +416,14 @@ Return-type rules for `Race`:
 
 CVPromise ready;
 
-auto waiter = MakePromise([&]() -> Promise<void> {
+WPromise waiter{[&]() -> Promise<void> {
 	try {
 		co_await *ready;
 	} catch (const CVPromise::End&) {
 		// The notifier was destroyed or rejected.
 	}
 	co_return;
-});
+}};
 
 ready.Notify(); // resolves the current waiters
 ready.Reset();  // resolves current waiters and arms the next wait
@@ -403,15 +448,19 @@ coordination between coroutines.
 
 StatePromise state;
 
-auto worker = MakePromise([&]() -> Promise<void> {
+WPromise worker{[&]() -> Promise<void> {
 	co_await state.WaitReady();
 	// Start work after the state becomes ready.
 	co_await state.WaitDone();
 	co_return;
-});
+}};
 
 state.Ready();
 state.Done();
+
+if (state.IsDone()) {
+	// ready/done cycle is complete
+}
 ```
 
 Methods:
@@ -420,6 +469,7 @@ Methods:
 - `WaitDone()` waits until `Done()` is called.
 - `Wait()` races ready/done and resolves when one of them happens first.
 - `Reset()` arms the helper again for the next cycle.
+- `IsDone()` returns `true` once the done state has been reached.
 
 Destroying a `StatePromise` calls `Done()` so waiting coroutines are unblocked.
 
@@ -463,9 +513,9 @@ or exception.
 ```cpp
 #include <promise/promise.h>
 
-auto prom = MakePromise([]() -> Promise<int> {
+WPromise prom{[]() -> Promise<int> {
 	co_return 42;
-});
+}};
 
 auto done = prom
 	.Then([](int value) -> Promise<int> { co_return value + 1; })
@@ -487,7 +537,7 @@ This avoids creating a coroutine frame for those steps.
 ```cpp
 #include <promise/promise.h>
 
-auto done = MakePromise([]() -> Promise<int> { co_return 5; })
+WPromise done{[]() -> Promise<int> { co_return 5; }}
 	.Then([](int value) { return value + 10; })
 	.Catch([](std::exception_ptr) { return 0; })
 	.Finally([]() {
@@ -523,7 +573,7 @@ Exceptions raised by an awaited promise propagate through `co_await` and can be 
 
 Promise<int> MightFail();
 
-auto Demo = MakePromise([] -> Promise<void> {
+WPromise Demo{[]() -> Promise<void> {
 	try {
 		auto value = co_await MightFail();
 		(void)value;
@@ -531,7 +581,7 @@ auto Demo = MakePromise([] -> Promise<void> {
 		(void)ex;
 	}
 	co_return;
-});
+}};
 ```
 
 Then argument rules:
@@ -554,7 +604,7 @@ Example with `std::optional` after `Catch`:
 ```cpp
 #include <promise/promise.h>
 
-auto chain = MakePromise([]() -> Promise<int> { co_return 1; })
+WPromise chain{[]() -> Promise<int> { co_return 1; }}
 	.Catch([](std::exception_ptr) -> Promise<void> { co_return; })
 	.Then([](std::optional<int> const& value) -> Promise<int> {
 		co_return value.value_or(0);
@@ -568,7 +618,7 @@ Example with `std::variant` when types differ:
 ```cpp
 #include <promise/promise.h>
 
-auto chain = MakePromise([]() -> Promise<int> { co_return 2; })
+WPromise chain{[]() -> Promise<int> { co_return 2; }}
 	.Then([](int const& value) -> Promise<double> { co_return value * 1.5; })
 	.Catch([](std::exception_ptr) -> Promise<int> { co_return 0; })
 	.Then([](std::variant<int, double> const& value) -> Promise<void> {
@@ -599,7 +649,7 @@ These methods let you inspect a promise state without awaiting it:
 ```cpp
 #include <promise/promise.h>
 
-auto prom = MakePromise([]() -> Promise<int> { co_return 10; });
+WPromise prom{[]() -> Promise<int> { co_return 10; }};
 
 if (prom.Done()) {
 	if (prom.Resolved()) {
@@ -627,9 +677,9 @@ annotated so the compiler warns if you create a promise and immediately discard 
 If you intentionally do not need the returned handle, call `Detach()` explicitly:
 
 ```cpp
-MakePromise([]() -> Promise<void> {
+WPromise{[]() -> Promise<void> {
 	co_return;
-}).Finally([]() {
+}}.Finally([]() {
 	// Cleanup only.
 }).Detach();
 ```
@@ -644,10 +694,10 @@ Without `Detach()`, destroying an unfinished `WPromise` waits for the promise ch
 ```cpp
 #include <promise/promise.h>
 
-MakePromise([]() -> Promise<void> {
+WPromise{[]() -> Promise<void> {
 	// Do work asynchronously.
 	co_return;
-}).Then([]() -> Promise<void> {
+}}.Then([]() -> Promise<void> {
 	// Follow-up work.
 	co_return;
 }).Detach();
