@@ -110,7 +110,7 @@ public:
       auto resolver = std::make_shared<MakeSharedEnabler>();
       auto resolve  = promise::Resolve<T>::Create(resolver);
       auto reject   = promise::Reject::Create([resolver](std::exception_ptr exception) constexpr {
-         resolver->Reject(exception);
+         resolver->Reject(std::move(exception));
       });
       return std::make_tuple(std::move(resolver), std::move(resolve), std::move(reject));
    }
