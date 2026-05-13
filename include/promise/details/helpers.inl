@@ -86,26 +86,30 @@ namespace promise {
 template <class... PROMISE>
 static constexpr auto
 All(PROMISE&&... promise) {
-   using RETURN = decltype(std::tuple_cat(std::declval<std::conditional_t<
-                                            std::is_void_v<return_t<PROMISE>>,
-                                            std::tuple<>,
-                                            std::tuple<return_t<PROMISE>>>>()...));
+   using RETURN = decltype(std::tuple_cat(
+     std::declval<std::conditional_t<
+       std::is_void_v<return_t<PROMISE>>,
+       std::tuple<>,
+       std::tuple<return_t<PROMISE>>>>()...
+   ));
 
-   return MakePromise([promise...]() mutable -> details::IPromise<RETURN> {
-      co_return std::tuple_cat(co_await [](auto&& promise) constexpr {
-         if constexpr (std::is_void_v<return_t<decltype(promise)>>) {
-            return std::forward<decltype(promise)>(promise).Then([]() constexpr {
-               return std::tuple<>{};
-            });
-         } else {
-            return std::forward<decltype(promise)>(promise).Then(
-              [](return_t<decltype(promise)> const& value) constexpr {
-                 return std::make_tuple(value);
-              }
-            );
-         }
-      }(std::forward<PROMISE>(promise))...);
-   });
+   return MakePromise(
+     [... promise = std::forward<PROMISE>(promise)]() mutable -> details::IPromise<RETURN> {
+        co_return std::tuple_cat(co_await [](auto&& promise) constexpr {
+           if constexpr (std::is_void_v<return_t<decltype(promise)>>) {
+              return std::forward<decltype(promise)>(promise).Then([]() constexpr {
+                 return std::tuple<>{};
+              });
+           } else {
+              return std::forward<decltype(promise)>(promise).Then(
+                [](return_t<decltype(promise)> const& value) constexpr {
+                   return std::make_tuple(value);
+                }
+              );
+           }
+        }(std::forward<PROMISE>(promise))...);
+     }
+   );
 }
 
 template <class V, class... TS>
@@ -174,14 +178,11 @@ Race(PROMISES&&... promise) {
    }())>>;
 
    auto [race_promise, resolve, reject] = Create<RaceReturn>();
-   auto result = std::make_unique<promise::details::WPromise<RaceReturn>>(std::move(race_promise));
 
-   ((result = std::make_unique<promise::details::WPromise<RaceReturn>>(
-       std::forward<PROMISES>(promise).Race(std::move(*result), resolve, reject)
-     )),
+   ((race_promise = std::forward<PROMISES>(promise).Race(std::move(race_promise), resolve, reject)),
     ...);
 
-   return std::move(*result);
+   return std::move(race_promise);
 }
 
 }  // namespace promise
@@ -239,8 +240,10 @@ MakePromise(FUN&& func, ARGS&&... args) {
 
    try {
       if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
-         if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
-                       && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>) {
+         if constexpr (
+           IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
+           && IS_REJECTOR<std::tuple_element_t<1, all_args_t<FUN>>>
+         ) {
             func(*resolve, *reject, std::forward<ARGS>(args)...);
          } else if constexpr (IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>) {
             func(*resolve, std::forward<ARGS>(args)...);
@@ -300,7 +303,10 @@ MakeRPromise(FUN&& func, ARGS&&... args) {
  * @return Constructed resolver-style promise or tuple.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN> && promise::WITH_RESOLVER<FUN>)
+   requires(
+     !promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN>
+     && promise::WITH_RESOLVER<FUN>
+   )
 static constexpr auto
 MakeRPromise(FUN&& func, ARGS&&... args) {
    return MakeRPromise(std::function{std::forward<FUN>(func)}, std::forward<ARGS>(args)...);

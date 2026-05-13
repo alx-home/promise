@@ -1129,7 +1129,7 @@ public:
       holder->resolve_ = resolve;
       holder->reject_  = reject;
 
-      auto promise = [&]() constexpr {
+      WPromise promise = [&]() constexpr {
          if constexpr (std::tuple_size_v<all_args_t<FUN>> >= 2) {
             if constexpr (
               IS_RESOLVER<std::tuple_element_t<0, all_args_t<FUN>>>
@@ -1167,11 +1167,9 @@ public:
       }
 
       if constexpr (RPROMISE) {
-         return std::make_tuple(
-           WPromise<T>{std::move(promise)}, std::move(resolve), std::move(reject)
-         );
+         return std::make_tuple(std::move(promise), std::move(resolve), std::move(reject));
       } else {
-         return WPromise<T>{std::move(promise)};
+         return promise;
       }
    }
 
