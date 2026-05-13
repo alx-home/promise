@@ -53,12 +53,13 @@ public:
    using Promise  = promise::details::Promise<T, false>;
    using RPromise = promise::details::Promise<T, true>;
 
-   using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
+   using Details     = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
+   using return_type = T;
 
    WPromise(WPromise const& other)                = default;
-   WPromise& operator=(WPromise const& other)     = delete;
+   WPromise& operator=(WPromise const& other)     = default;
    WPromise(WPromise&& other) noexcept            = default;
-   WPromise& operator=(WPromise&& other) noexcept = delete;
+   WPromise& operator=(WPromise&& other) noexcept = default;
 
    ~WPromise() {
       std::visit(
@@ -71,50 +72,120 @@ public:
       );
    }
 
-   /**
-    * @brief Check if the promise can resume immediately.
-    *
-    * @return True if ready to resume.
-    */
-   bool await_ready() const {
-      return std::visit(
-        [](auto const& details) constexpr {
-           assert(details);
-           return details->await_ready();
-        },
-        details_
-      );
-   }
+   class VAwaitable : public VPromise::Awaitable {
+   public:
+      explicit VAwaitable(Details details)
+         : details_(std::move(details)) {}
 
-   /**
-    * @brief Suspend the coroutine and register continuation.
-    *
-    * @param h Awaiting coroutine handle.
-    */
-   void await_suspend(std::coroutine_handle<> h) const {
-      std::visit(
-        [h = std::move(h)](auto const& details) constexpr {
-           assert(details);
-           details->await_suspend(std::move(h));
-        },
-        details_
-      );
-   }
+      /**
+       * @brief Check if the promise can resume immediately.
+       *
+       * @return True if ready to resume.
+       */
+      bool await_ready() const final {
+         return std::visit(
+           [](auto const& details) constexpr {
+              assert(details);
+              return details->await_ready();
+           },
+           details_
+         );
+      }
 
-   /**
-    * @brief Resume the await and return the resolved value or throw.
-    *
-    * @return Resolved value for non-void promises.
-    * @warning Throws if the promise was rejected.
-    */
-   T await_resume() const noexcept(false) {
-      return std::visit(
-        [](auto const& details) constexpr {
-           assert(details);
-           return details->await_resume();
-        },
-        details_
-      );
+      /**
+       * @brief Suspend the coroutine and register continuation.
+       *
+       * @param h Awaiting coroutine handle.
+       */
+      bool await_suspend(std::coroutine_handle<> h) const final {
+         return std::visit(
+           [h = std::move(h)](auto const& details) constexpr {
+              assert(details);
+              return details->await_suspend(std::move(h));
+           },
+           details_
+         );
+      }
+
+      /**
+       * @brief Resume the await and return or throw.
+       *
+       * @warning Throws if the promise was rejected.
+       */
+      void await_resume() const noexcept(false) final {
+         std::unique_ptr<VAwaitable const> const self{this};  // ensure deletion after resume
+
+         std::visit(
+           [](auto const& details) constexpr {
+              assert(details);
+              details->await_resume();
+           },
+           details_
+         );
+      }
+
+   private:
+      Details details_;
+   };
+
+   class Awaitable {
+   public:
+      explicit Awaitable(Details details)
+         : details_(std::move(details)) {}
+
+      /**
+       * @brief Check if the promise can resume immediately.
+       *
+       * @return True if ready to resume.
+       */
+      bool await_ready() const {
+         return std::visit(
+           [](auto const& details) constexpr {
+              assert(details);
+              return details->await_ready();
+           },
+           details_
+         );
+      }
+
+      /**
+       * @brief Suspend the coroutine and register continuation.
+       *
+       * @param h Awaiting coroutine handle.
+       */
+      bool await_suspend(std::coroutine_handle<> h) const {
+         return std::visit(
+           [h = std::move(h)](auto const& details) constexpr {
+              assert(details);
+              return details->await_suspend(std::move(h));
+           },
+           details_
+         );
+      }
+
+      /**
+       * @brief Resume the await and return the resolved value or throw.
+       *
+       * @return Resolved value for non-void promises.
+       * @warning Throws if the promise was rejected.
+       */
+      T await_resume() const noexcept(false) {
+         return std::visit(
+           [](auto const& details) constexpr {
+              assert(details);
+              return details->await_resume();
+           },
+           details_
+         );
+      }
+
+   private:
+      Details details_;
+   };
+
+   Awaitable        operator co_await() { return Awaitable{details_}; }
+   friend Awaitable operator co_await(WPromise const& promise) {
+      return Awaitable{promise.details_};
    }
 
    /**
@@ -483,15 +554,7 @@ private:
     *
     * @return Reference to a type-erased awaitable wrapper.
     */
-   Awaitable& VAwait() final {
-      return std::visit(
-        [&](auto const& details) constexpr -> auto& {
-           assert(details);
-           return details->VAwait();
-        },
-        details_
-      );
-   }
+   VPromise::Awaitable& VAwait() final { return *new VAwaitable{details_}; }
 
    /**
     * @brief Construct from shared promise details.
@@ -533,25 +596,12 @@ public:
    using Parent       = WPromise<T>;
    using Details      = promise::details::Promise<T, WITH_RESOLVER>;
    using promise_type = Details::promise_type;
+   using return_type  = T;
 
    /**
-    * @brief Check if the promise can resume immediately.
-    * @return True if ready to resume.
+    * @brief co_await operator for resolver-less promises.
     */
-   using WPromise<T>::await_ready;
-
-   /**
-    * @brief Suspend the coroutine and register continuation.
-    * @param h Awaiting coroutine handle.
-    */
-   using WPromise<T>::await_suspend;
-
-   /**
-    * @brief Resume the await and return the resolved value or throw.
-    * @return Resolved value for non-void promises.
-    * @warning Throws if the promise was rejected.
-    */
-   using WPromise<T>::await_resume;
+   using WPromise<T>::operator co_await;
 
    /**
     * @brief Check if the promise is resolved or rejected.
@@ -716,5 +766,17 @@ private:
    template <class, bool>
    friend class ::promise::details::Promise;
 };
+
+/**
+ * @brief Get a type-erased awaitable wrapper.
+ *
+ * @return Reference to a heap-allocated awaitable wrapper.
+ * @warning The wrapper is deleted in await_resume.
+ */
+template <class T, bool WITH_RESOLVER>
+VPromise::Awaitable&
+Promise<T, WITH_RESOLVER>::VAwait() {
+   return *new WPromise<T>::VAwaitable{this->shared_from_this()};
+}
 
 }  // namespace promise::details

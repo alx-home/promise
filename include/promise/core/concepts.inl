@@ -76,14 +76,10 @@ struct return_<std::function<T(ARGS...)>> {
    using type = T;
 };
 
-template <class T, bool WITH_RESOLVER>
-struct return_<details::IPromise<T, WITH_RESOLVER>> {
-   using type = T;
-};
-
 template <class T>
-struct return_<details::WPromise<T>> {
-   using type = T;
+   requires(requires { typename T::return_type; })
+struct return_<T> {
+   using type = typename T::return_type;
 };
 
 /**

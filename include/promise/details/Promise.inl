@@ -74,6 +74,7 @@ class WPromise;
 template <class T, bool WITH_RESOLVER>
 class Promise
    : public Handle<T, WITH_RESOLVER>
+   , public std::enable_shared_from_this<Promise<T, WITH_RESOLVER>>
 #ifdef PROMISE_MEMCHECK
    , public Refcount
 #endif  // PROMISE_MEMCHECK
@@ -132,6 +133,7 @@ public:
    Promise(Promise const&)                    = delete;
    Promise& operator=(Promise const&)         = delete;
 
+private:
    /**
     * @brief Check if the promise can resume immediately.
     *
@@ -182,7 +184,6 @@ public:
       }
    }
 
-private:
    template <class...>
       requires(!WITH_RESOLVER)
    /**
@@ -218,62 +219,7 @@ private:
     * @return Reference to a heap-allocated awaitable wrapper.
     * @warning The wrapper is deleted in await_resume.
     */
-   VPromise::Awaitable& VAwait() final {
-      struct Awaitable
-         : VPromise::Awaitable
-#ifdef PROMISE_MEMCHECK
-         , Refcount
-#endif
-      {
-         /**
-          * @brief Construct a type-erased awaitable.
-          *
-          * @param self Promise details to await.
-          */
-         Awaitable(details::Promise<T, WITH_RESOLVER>& self)
-            :  //
-#ifdef PROMISE_MEMCHECK
-            Refcount(static_cast<VPromise*>(&self))
-            ,
-#endif
-            self_(self) {
-         }
-
-         Awaitable(Awaitable&&) noexcept            = default;
-         Awaitable& operator=(Awaitable&&) noexcept = default;
-         Awaitable(Awaitable const&)                = delete;
-         Awaitable& operator=(Awaitable const&)     = delete;
-
-         /**
-          * @brief Check if the await can complete synchronously.
-          *
-          * @return True if ready to resume.
-          */
-         bool await_ready() final { return self_.await_ready(); }
-
-         /**
-          * @brief Resume the await and destroy the wrapper.
-          */
-         void await_resume() final {
-            // Ensure the wrapper is destroyed after resuming
-            std::unique_ptr<Awaitable> self{this};
-
-            self_.await_resume();
-         }
-
-         /**
-          * @brief Suspend the coroutine and register continuation.
-          *
-          * @param h Awaiting coroutine handle.
-          */
-         bool await_suspend(std::coroutine_handle<> h) final { return self_.await_suspend(h); }
-
-      private:
-         details::Promise<T, WITH_RESOLVER>& self_;
-      };
-
-      return *new Awaitable{*this};
-   }
+   VPromise::Awaitable& VAwait() final;
 
    /**
     * @brief Get the stored exception using an existing lock.

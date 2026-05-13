@@ -43,7 +43,8 @@ public:
 
    virtual ~VPromise() = default;
 
-   struct Awaitable {
+   class Awaitable {
+   public:
       Awaitable()          = default;
       virtual ~Awaitable() = default;
 
@@ -57,17 +58,17 @@ public:
        *
        * @return True if ready to resume.
        */
-      virtual bool await_ready() = 0;
+      virtual bool await_ready() const = 0;
       /**
-       * @brief Resume the await and return its result.
+       * @brief Resume the await.
        */
-      virtual void await_resume() = 0;
+      virtual void await_resume() const = 0;
       /**
        * @brief Suspend the coroutine and register continuation.
        *
        * @param h Awaiting coroutine handle.
        */
-      virtual bool await_suspend(std::coroutine_handle<> h) = 0;
+      virtual bool await_suspend(std::coroutine_handle<> h) const = 0;
    };
 
    /**
