@@ -379,7 +379,7 @@ main() {
             });
 
             try {
-               co_await MakePromise([&]() -> WPromise<void> { return Test(); });
+               co_await Test();
             } catch (std::exception const& e) {
                std::cout << "exc3? " << e.what() << std::endl;
             }

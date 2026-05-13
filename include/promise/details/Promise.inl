@@ -321,13 +321,11 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Then(FUN&& func, ARGS&&... args) & {
-      static_assert(!IS_WPROMISE<FUN>, "Then does not support promise wrapper!");
-
       if (std::unique_lock ulock{this->mutex_}; this->IsDone(ulock)) {
          ulock.unlock();
          std::shared_lock lock{this->mutex_};
 
-         if constexpr (!IS_PROMISE<FUN>) {
+         if constexpr (!IS_PROMISE_FUNCTION<FUN>) {
             // Function return type
             using T2 = return_t<FUN>;
 
@@ -387,7 +385,7 @@ private:
 
             return ::MakePromise(std::move(func), value, std::forward<ARGS>(args)...);
          }
-      } else if constexpr (IS_PROMISE<FUN>) {
+      } else if constexpr (IS_PROMISE_FUNCTION<FUN>) {
          // Promise return type
          using T2 = return_t<return_t<FUN>>;
 
@@ -522,12 +520,10 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Catch(FUN&& func, ARGS&&... args) & {
-      static_assert(!IS_WPROMISE<FUN>, "Catch does not support promise wrapper!");
-
       // Promise return type
       using promise_t = return_t<decltype(std::function{func})>;
       using T2        = std::remove_pointer_t<decltype([]() constexpr {
-         if constexpr (IS_PROMISE<FUN>) {
+         if constexpr (IS_PROMISE_FUNCTION<FUN>) {
             return static_cast<return_t<promise_t>*>(nullptr);
          } else {
             return static_cast<promise_t*>(nullptr);
@@ -581,7 +577,7 @@ private:
                try {
                   std::rethrow_exception(exception);
                } catch (Exception const& ex) {
-                  if constexpr (IS_PROMISE<FUN> && std::is_lvalue_reference_v<Exception>) {
+                  if constexpr (IS_PROMISE_FUNCTION<FUN> && std::is_lvalue_reference_v<Exception>) {
                      // Copy exception to avoid dangling reference if func captures it by
                      // reference and is called after this scope
                      using invoke_promise_t =
@@ -605,7 +601,7 @@ private:
          return exception_wrapper([func = std::forward<FUN>(func),
                                    ... args =
                                      std::forward<ARGS>(args)](auto const& ex) constexpr mutable {
-            if constexpr (IS_PROMISE<FUN>) {
+            if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                return MakePromise(std::move(func), ex, std::forward<ARGS>(args)...);
             } else if constexpr (std::is_void_v<T2>) {
                func(ex, std::forward<ARGS>(args)...);
@@ -646,7 +642,7 @@ private:
             if (exception) {
                lock.unlock();
 
-               if constexpr (IS_PROMISE<FUN>) {
+               if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                   resolve_wrapper(apply_exception(exception), std::move(resolve))
                     .Catch([reject](std::exception_ptr exception) constexpr {
                        (*reject)(std::move(exception));
@@ -687,7 +683,7 @@ private:
                     if (exception) {
                        lock.unlock();
 
-                       if constexpr (IS_PROMISE<FUN>) {
+                       if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                           resolve_wrapper(apply_exception(exception), std::move(resolve))
                             .Catch([reject =
                                       std::move(reject)](std::exception_ptr exception) constexpr {
@@ -768,12 +764,10 @@ private:
     */
    template <class FUN, class... ARGS>
    [[nodiscard]] constexpr auto Finally(FUN&& func) & {
-      static_assert(!IS_WPROMISE<FUN>, "Finally does not support promise wrapper!");
-
       auto apply_value = [](auto&& resolve, auto&& reject, auto&& func, auto&&... value) constexpr {
          static_assert(sizeof...(value) == (IS_VOID ? 0 : 1));
 
-         if constexpr (IS_PROMISE<FUN>) {
+         if constexpr (IS_PROMISE_FUNCTION<FUN>) {
             if constexpr (std::is_void_v<T>) {
                MakePromise(std::forward<FUN>(func))
                  .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); })
@@ -809,7 +803,7 @@ private:
 
       auto apply_exception =
         [](auto&& reject, auto&& func, std::exception_ptr exception) constexpr {
-           if constexpr (IS_PROMISE<FUN>) {
+           if constexpr (IS_PROMISE_FUNCTION<FUN>) {
               MakePromise(std::forward<FUN>(func))
                 .Then([reject    = std::forward<decltype(reject)>(reject),
                        exception = std::move(exception)]() constexpr {
@@ -838,7 +832,7 @@ private:
          if (exception) {
             lock.unlock();
 
-            if constexpr (IS_PROMISE<FUN>) {
+            if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                apply_exception(std::move(reject), std::forward<FUN>(func), exception);
             } else {
                apply_exception(std::move(reject), std::forward<FUN>(func), exception);
@@ -1103,7 +1097,10 @@ public:
    __attribute__((no_sanitize("address")))
 #endif
    static constexpr auto Create(FUN&& func, ARGS&&... args) {
-
+      static_assert(
+        IS_PROMISE_FUNCTION<FUN>,
+        "Create only supports callables that return promises, not promise wrappers!"
+      );
       struct FunctionImpl : Function {
          /**
           * @brief Construct a function holder from an rvalue callable.

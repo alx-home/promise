@@ -200,6 +200,15 @@ static constexpr bool IS_PROMISE = IsPromise<return_or_void_t<FUN>>::value;
 template <class FUN>
 static constexpr bool IS_WPROMISE = IsWPromise<std::remove_cvref_t<FUN>>::value;
 
+/**
+ * @brief Check if a type is a promise function.
+ *
+ * @tparam FUN Type to check.
+ */
+template <class FUN>
+static constexpr bool IS_PROMISE_FUNCTION =
+  IsPromise<return_or_void_t<FUN>>::value && !IS_WPROMISE<return_or_void_t<FUN>>;
+
 template <class FUN>
 struct args_;
 
