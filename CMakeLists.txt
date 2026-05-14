@@ -15,7 +15,7 @@ option(PROMISE_BUILD_TESTS "Build the promise test executable" ${PROMISE_BUILD_T
 option(PROMISE_FETCH_BUILD_TOOLS "Fetch build_tools when win32 helper commands are unavailable" ON)
 option(PROMISE_FETCH_CPP_UTILS "Fetch cpp_utils when alx-home::cpp_utils is unavailable" ON)
 
-set(PROMISE_BUILD_TOOLS_GIT_REPOSITORY "git@github.com:alx-home/build_tools.git" CACHE STRING "Git repository used to fetch build_tools")
+set(PROMISE_BUILD_TOOLS_GIT_REPOSITORY "https://github.com/alx-home/build_tools.git" CACHE STRING "Git repository used to fetch build_tools")
 set(PROMISE_BUILD_TOOLS_GIT_TAG "release" CACHE STRING "Git tag or branch used to fetch build_tools")
 set(PROMISE_CPP_UTILS_GIT_REPOSITORY "https://github.com/alx-home/cpp_utils.git" CACHE STRING "Git repository used to fetch cpp_utils")
 set(PROMISE_CPP_UTILS_GIT_TAG "release" CACHE STRING "Git tag or branch used to fetch cpp_utils")
@@ -30,11 +30,7 @@ if(NOT COMMAND win32_library OR NOT COMMAND win32_executable)
     GIT_REPOSITORY ${PROMISE_BUILD_TOOLS_GIT_REPOSITORY}
     GIT_TAG ${PROMISE_BUILD_TOOLS_GIT_TAG}
   )
-  FetchContent_GetProperties(alx_home_build_tools)
-
-  if(NOT alx_home_build_tools_POPULATED)
-    FetchContent_Populate(alx_home_build_tools)
-  endif()
+  FetchContent_MakeAvailable(alx_home_build_tools)
 
   include(${alx_home_build_tools_SOURCE_DIR}/cmake/win32_library.cmake)
   include(${alx_home_build_tools_SOURCE_DIR}/cmake/win32_executable.cmake)
