@@ -1,0 +1,7 @@
+{
+   "sonarlint.connectedMode.project": {
+      "connectionId": "https-sonarqube-alex-home-fr",
+      "projectKey": "alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce"
+   },
+   "sonarlint.pathToCompileCommands": "${workspaceFolder}\\build\\compile_commands.json"
+}
