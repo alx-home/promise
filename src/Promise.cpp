@@ -34,9 +34,18 @@ std::mutex                          Refcount::mutex{};
 #   endif
 #endif  // PROMISE_MEMCHECK
 
+/** @brief Creates a reject callback wrapper.
+ *
+ * @param impl Function invoked with the rejection exception.
+ */
 Reject::Reject(std::function<void(std::exception_ptr)> impl)
    : impl_(std::move(impl)) {}
 
+/** @brief Rejects once with the provided exception.
+ *
+ * @param exception Exception payload to forward to the reject implementation.
+ * @return true when this call performed the rejection, false if already rejected.
+ */
 bool
 Reject::operator()(std::exception_ptr exception) const {
    if (!rejected_.exchange(true)) {
@@ -47,19 +56,35 @@ Reject::operator()(std::exception_ptr exception) const {
    return false;
 }
 
+/** @brief Indicates whether this reject callback has already run.
+ *
+ * @return true when a rejection has been recorded.
+ */
 Reject::
 operator bool() const {
    return rejected_;
 }
 
+/** @brief Creates a void resolver callback wrapper.
+ *
+ * @param resolver Shared resolver state used to resolve the promise.
+ */
 Resolve<void>::Resolve(std::shared_ptr<Resolver<void>> resolver)
    : resolver_(std::move(resolver)) {}
 
+/** @brief Resolves the underlying void promise.
+ *
+ * @return true when resolution succeeds.
+ */
 bool
 Resolve<void>::operator()() const {
    return resolver_->Resolve();
 }
 
+/** @brief Indicates whether the underlying resolver is done.
+ *
+ * @return true when the resolver reached a terminal state.
+ */
 Resolve<void>::
 operator bool() const {
    return resolver_->Done();

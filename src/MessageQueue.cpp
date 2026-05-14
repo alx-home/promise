@@ -26,6 +26,10 @@ SOFTWARE.
 
 namespace promise {
 
+/** @brief Returns the ID of the thread associated with the message queue.
+ *
+ * @return The thread ID.
+ */
 std::thread::id
 MessageQueue::ThreadId() const {
    return Pool<1>::ThreadIds()[0];

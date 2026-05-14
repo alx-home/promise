@@ -28,6 +28,7 @@ SOFTWARE.
 #include <stdexcept>
 #include <type_traits>
 
+/** @brief A promise that can be waited on, notified, and rejected. */
 struct CVPromise {
 public:
    struct End : std::runtime_error {
@@ -35,6 +36,7 @@ public:
          : std::runtime_error("Promise ended") {}
    };
 
+   /** @brief Constructs a new CVPromise. */
    CVPromise();
 
    CVPromise(CVPromise const&)                = delete;
@@ -42,16 +44,39 @@ public:
    CVPromise& operator=(CVPromise const&)     = delete;
    CVPromise& operator=(CVPromise&&) noexcept = delete;
 
+   /** @brief Destroys the condition-variable promise.
+    *
+    * The destructor rejects the underlying promise with @ref End to wake any
+    * pending waiters and prevent coroutines from blocking indefinitely.
+    */
    virtual ~CVPromise();
 
+   /** @brief Converts the CVPromise to a WPromise<void>. */
    operator WPromise<void>() const;
-   WPromise<void>        Wait() const;
-   WPromise<void>        operator*() const;
+
+   /** @brief Gets a WPromise<void> that resolves when the CVPromise is resolved or rejected.
+    *
+    * @return A WPromise<void> that resolves when the CVPromise is resolved or rejected.
+    */
+   WPromise<void> Wait() const;
+
+   /** @brief Gets the underlying WPromise<void>. */
+   WPromise<void> operator*() const;
+   /** @brief Gets a pointer to the underlying WPromise<void>. */
    WPromise<void> const* operator->() const;
 
+   /** @brief Notifies the promise, resolving it if it hasn't been resolved or rejected. */
    void Notify();
+   /** @brief Resets the promise, making it reusable. */
    void Reset();
 
+   /** @brief Rejects the promise with a specific exception, rejecting it if it hasn't been resolved
+    * or rejected.
+    *
+    * @tparam EXCEPTION The type of exception to reject the promise with.
+    * @tparam ARGS The types of arguments to construct the exception with.
+    * @param args The arguments to construct the exception with.
+    */
    template <class EXCEPTION, class... ARGS>
       requires(std::is_constructible_v<EXCEPTION, ARGS && ...>)
    void Reject(ARGS&&... args) {
@@ -65,10 +90,16 @@ public:
    }
 
 private:
-   CVPromise(std::tuple<
-             std::unique_ptr<WPromise<void>>,
-             std::shared_ptr<promise::Resolve<void>>,
-             std::shared_ptr<promise::Reject>>&& cv);
+   /** @brief Constructs a CVPromise from a tuple of promise components.
+    *
+    * @param cv A tuple containing the promise components.
+    */
+   CVPromise(
+     std::tuple<
+       std::unique_ptr<WPromise<void>>,
+       std::shared_ptr<promise::Resolve<void>>,
+       std::shared_ptr<promise::Reject>>&& cv
+   );
 
    mutable std::shared_mutex               mutex_;
    std::unique_ptr<WPromise<void>>         promise_;

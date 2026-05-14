@@ -37,6 +37,8 @@ namespace promise {
 
 using namespace std::chrono;
 
+/** @brief A thread pool that allows dispatching functions to be executed asynchronously, returning
+ * promises for their results. */
 template <std::size_t SIZE = 10>
 class Pool : private ::Pool<false, SIZE> {
 public:
@@ -51,14 +53,14 @@ public:
 
    /**
     * @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
-result.
-     *
-     * @tparam RETURN Return type of the function.
-     * @param until Optional time point until which the function should be executed. If not
-provided, executes as soon as possible.
-     * @return Promise that resolves with the function's return value or rejects if the queue is
-stopped.
-     */
+    * result.
+    *
+    * @tparam RETURN Return type of the function.
+    * @param until Optional time point until which the function should be executed. If not
+    * provided, executes as soon as possible.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    [[nodiscard]] WPromise<void> Dispatch(
      std::optional<typename Pool::time_point> until = std::nullopt
    ) const noexcept {
@@ -78,10 +80,28 @@ stopped.
       return std::move(promise);
    };
 
+   /** @brief Dispatch a function to be executed on the pool's thread after a certain delay,
+    * returning a promise for its result.
+    *
+    * @tparam RETURN Return type of the function.
+    * @param delay Delay after which the function should be executed.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    [[nodiscard]] WPromise<void> Dispatch(typename Pool::duration delay) const noexcept {
       return Dispatch(steady_clock::now() + delay);
    };
 
+   /** @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
+    * result.
+    *
+    * @tparam RETURN Return type of the function.
+    * @param func Function to be executed.
+    * @param until Optional time point until which the function should be executed. If not provided,
+    * executes as soon as possible.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    template <class RETURN>
    [[nodiscard]] WPromise<RETURN> Dispatch(
      std::function<RETURN()>&&                func,
@@ -109,6 +129,16 @@ stopped.
       return std::move(promise);
    }
 
+   /** @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
+    * result.
+    *
+    * @tparam RETURN Return type of the function.
+    * @param func Function to be executed.
+    * @param until Optional time point until which the function should be executed. If not provided,
+    * executes as soon as possible.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    template <class RETURN>
    [[nodiscard]] auto Dispatch(
      std::function<void(Resolve<RETURN> const&, Reject const&)>&& func,
@@ -131,6 +161,16 @@ stopped.
       return std::move(promise);
    }
 
+   /** @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
+    * result.
+    *
+    * @tparam FUN Type of the function to be executed.
+    * @param func Function to be executed.
+    * @param until Optional time point until which the function should be executed. If not provided,
+    * executes as soon as possible.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    template <class FUN>
       requires(promise::function_constructible<FUN>)
    [[nodiscard]] auto Dispatch(
@@ -144,6 +184,15 @@ stopped.
       }
    }
 
+   /** @brief Dispatch a function to be executed on the pool's thread after a certain delay,
+    * returning a promise for its result.
+    *
+    * @tparam FUN Type of the function to be executed.
+    * @param func Function to be executed.
+    * @param delay Delay after which the function should be executed.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    template <class FUN>
    [[nodiscard]] auto Dispatch(FUN&& func, typename Pool::duration delay) const noexcept {
       return Dispatch(std::forward<FUN>(func), steady_clock::now() + delay);

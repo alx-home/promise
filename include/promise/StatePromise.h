@@ -26,6 +26,8 @@ SOFTWARE.
 
 #include "CVPromise.h"
 
+/** @brief A promise that represents the state of an operation, allowing waiting for readiness or
+ * completion. */
 struct StatePromise {
 public:
    StatePromise() = default;
@@ -37,14 +39,33 @@ public:
 
    virtual ~StatePromise();
 
-   WPromise<void> WaitReady() const;
-   WPromise<void> WaitDone() const;
-   WPromise<void> Wait() const;
+   /** @brief Waits for the promise to be ready.
+    *
+    * @return A promise that resolves when the state promise is ready.
+    */
+   [[nodiscard]] WPromise<void> WaitReady() const;
+   /** @brief Waits for the promise to be done.
+    *
+    * @return A promise that resolves when the state promise is done.
+    */
+   [[nodiscard]] WPromise<void> WaitDone() const;
+   /** @brief Waits for the promise to be either ready or done.
+    *
+    * @return A promise that resolves when the state promise is either ready or done.
+    */
+   [[nodiscard]] WPromise<void> Wait() const;
 
+   /** @brief Marks the promise as ready. */
    void Ready();
+   /** @brief Marks the promise as done. */
    void Done();
+   /** @brief Resets the promise to its initial state, allowing it to be reused. */
    void Reset();
 
+   /** @brief Checks if the promise is done.
+    *
+    * @return True if the promise is done.
+    */
    bool IsDone() const;
 
 private:

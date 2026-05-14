@@ -24,12 +24,17 @@ SOFTWARE.
 
 #include "CVPromise.h"
 
+/** @brief Constructs a new CVPromise with a fresh promise state. */
 CVPromise::CVPromise()
    : CVPromise([] constexpr {
       auto [promise, resolve, reject] = Promise<void>::Create();
       return std::make_tuple(std::make_unique<WPromise<void>>(std::move(promise)), resolve, reject);
    }()) {}
 
+/** @brief Constructs a CVPromise from pre-created promise components.
+ *
+ * @param cv Tuple containing the promise, resolve callback, and reject callback.
+ */
 CVPromise::CVPromise(
   std::tuple<
     std::unique_ptr<WPromise<void>>,
@@ -40,35 +45,53 @@ CVPromise::CVPromise(
    , resolve_(std::move(std::get<1>(cv)))
    , reject_(std::move(std::get<2>(cv))) {}
 
-CVPromise::~CVPromise() {
-   // Reject the promise on destruction to unblock any waiting coroutines
-   Reject<End>();
-}
+/** @brief Rejects the promise with End on destruction.
+ *
+ * This ensures pending waiters are released instead of blocking indefinitely.
+ */
+CVPromise::~CVPromise() { Reject<End>(); }
 
+/** @brief Returns the current waitable promise.
+ *
+ * @return A copy of the underlying WPromise<void>.
+ */
 CVPromise::
 operator WPromise<void>() const {
    std::shared_lock lock{mutex_};
    return *promise_;
 }
 
+/** @brief Returns the current waitable promise.
+ *
+ * @return A copy of the underlying WPromise<void>.
+ */
 WPromise<void>
 CVPromise::Wait() const {
    std::shared_lock lock{mutex_};
    return *promise_;
 }
 
+/** @brief Dereferences to the underlying promise.
+ *
+ * @return A copy of the underlying WPromise<void>.
+ */
 WPromise<void>
 CVPromise::operator*() const {
    std::shared_lock lock{mutex_};
    return *promise_;
 }
 
+/** @brief Provides pointer-style access to the underlying promise.
+ *
+ * @return Pointer to the stored WPromise<void>.
+ */
 WPromise<void> const*
 CVPromise::operator->() const {
    std::shared_lock lock{mutex_};
    return promise_.get();
 }
 
+/** @brief Resolves the current promise state. */
 void
 CVPromise::Notify() {
    auto const resolve = [this] {
@@ -79,6 +102,10 @@ CVPromise::Notify() {
    (*resolve)();
 }
 
+/** @brief Reinitializes the internal promise after completion.
+ *
+ * If the current promise is still pending, this function is a no-op.
+ */
 void
 CVPromise::Reset() {
    std::unique_lock lock{mutex_};

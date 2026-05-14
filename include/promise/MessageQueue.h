@@ -28,6 +28,8 @@ SOFTWARE.
 
 namespace promise {
 
+/** @brief A message queue that executes functions on a single thread, returning promises for their
+ * results. */
 class MessageQueue : public Pool<1> {
 public:
    using Pool<1>::Pool;
@@ -36,11 +38,23 @@ public:
    using Pool<1>::Dispatch;
    using Pool<1>::Stop;
 
+   /** @brief Dispatch a function to be executed on the pool's thread, returning a promise for its
+    * result.
+    *
+    * @tparam ARGS Types of the arguments to be passed to the function.
+    * @param args Arguments to be passed to the function.
+    * @return Promise that resolves with the function's return value or rejects if the queue is
+    * stopped.
+    */
    template <class... ARGS>
    [[nodiscard]] WPromise<void> Ensure(ARGS&&... args) const noexcept {
       return Dispatch(std::forward<ARGS>(args)...);
    }
 
+   /** @brief Gets the ID of the thread running the message queue.
+    *
+    * @return The ID of the thread running the message queue.
+    */
    std::thread::id ThreadId() const;
 };
 
