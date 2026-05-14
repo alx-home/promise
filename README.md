@@ -293,15 +293,8 @@ ready.Notify();
 // - If the current promise is still pending, this function is a no-op.
 ready.Reset();
 
-// -----------------------------------------------------------------------------
-// CVPromise — coroutine‑friendly condition‑variable style primitive
-// - co_await *ready     waits until the notifier signals
-// - Notify()            resolves all current waiters (one‑shot signal)
-// - Reset()             resolves current waiters AND arms the next wait cycle
-// - Destroying or rejecting the notifier throws CVPromise::End in waiters
-// -----------------------------------------------------------------------------
-CVPromise ready;
-co_await *ready;  // Wait for Notify()
+// Wait for Notify()
+co_await *ready;  
 
 // -----------------------------------------------------------------------------
 // StatePromise — coroutine‑friendly state-transition primitive
