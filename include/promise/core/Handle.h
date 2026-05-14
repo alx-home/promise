@@ -343,7 +343,13 @@ protected:
    handle_type                                         handle_{nullptr};
    /** @brief Shared ownership of the promise implementation. */
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
-   /** @brief Resolver for external resolution (when WITH_RESOLVER is true). */
+   /**
+    * @brief Shared resolver/state storage used by the promise in both modes.
+    *
+    * This member backs internal resolution/state handling regardless of
+    * WITH_RESOLVER. It is only externally exposed as a resolver when
+    * WITH_RESOLVER is true.
+    */
    std::shared_ptr<Resolver<T>>                        resolver_{nullptr};
 
 public:
