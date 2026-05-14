@@ -1,23 +1,56 @@
 <p align="center">
-	<a href="https://github.com/alx-home/promise/actions/workflows/build.yml">
-		<img alt="Build" src="https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg">
-	</a>
-	<a href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
-		<img alt="Quality Gate Status" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
-	</a>
+    <a href="https://github.com/alx-home/promise/actions/workflows/build.yml">
+        <img alt="Build" src="https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg">
+    </a>
+    <a href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Quality Gate Status" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
 </p>
 
 <h1 align="center">alx-home promise</h1>
 
 <p align="center">
-Coroutine-native Promises for C++20 with JavaScript-like ergonomics and C++ correctness.
+<strong>JavaScript‑style Promises for modern C++20 — coroutine‑native, fully thread‑safe, and designed for human‑friendly async code.</strong>
 </p>
 
-> Chain with `Then`, recover with `Catch`, clean up with `Finally`, and keep lambda captures alive until completion.
+<p align="center">
+Chain with <code>Then</code>, recover with <code>Catch</code>, clean up with <code>Finally</code>, and keep captures alive until completion — just like JS promises, but with C++ performance and correctness.
+</p>
+
+---
+
+## Why this library exists
+
+C++20 coroutines are powerful, but the ecosystem around them is still low‑level and hard to use.  
+JavaScript, on the other hand, nailed the ergonomics of async programming years ago.
+
+This library brings that experience to C++:
+
+- **JS‑style API** (`Then`, `Catch`, `Finally`, chaining, composition)
+- **Native coroutine integration** (`co_await`, `Promise<T>` return types)
+- **Fully thread‑safe** resolution, rejection, and awaiting
+- **Zero allocations** in the common path
+- **Safe lambda capture lifetime** (captures live until the promise completes)
+- **Combinators** like `All`, `Race`, resolver‑style promises, pools, message queues, and async coordination primitives
+
+If you know JavaScript promises, you already know how to use this library — but with the performance and determinism of C++.
+
+
+## At a glance
+
+| Capability | What you get |
+| --- | --- |
+| JS‑style ergonomics | `Then`, `Catch`, `Finally`, chaining, composition |
+| Native coroutine support | `Promise<T>` return types, seamless `co_await` |
+| Full thread safety | Resolve/reject/await from any thread |
+| Resolver model | `Resolve<T>`, `Reject`, `Promise<T, true>` |
+| Combinators | `promise::All`, `promise::Race`, `promise::Create<T>()` |
+| Async coordination | `CVPromise`, `StatePromise` |
+| Threaded dispatch | `promise::Pool`, `promise::MessageQueue` |
+| Introspection | `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()` |
 
 ## Contents
 
-- [At a glance](#at-a-glance)
 - [Thread safety](#thread-safety)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
@@ -43,27 +76,14 @@ Coroutine-native Promises for C++20 with JavaScript-like ergonomics and C++ corr
 - [Build](#build)
 - [Memory checking](#memory-checking)
 
-## At a glance
-
-| Capability | What you get |
-| --- | --- |
-| Native coroutine support | `Promise<T>` return types and seamless `co_await` integration |
-| JS-style chaining | `Then`, `Catch`, and `Finally` for expressive async flows |
-| Resolver model | `Promise<T, true>`, `Resolve<T>`, and `Reject` for explicit completion |
-| Combinators | `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()` |
-| Threaded dispatch | `promise::Pool<SIZE>` and `promise::MessageQueue` |
-| Async coordination | `CVPromise` and `StatePromise` for signaling and ready/done workflows |
-| Introspection | `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()`, `Awaiters()`, `UseCount()` |
 
 ## Thread safety
 
-Promise state transitions are synchronized internally, so you can resolve, reject, and await
-promises from multiple threads without data races.
+Promise state transitions are internally synchronized.  
+You can safely resolve, reject, chain, and `co_await` promises from **any thread** without data races.
 
-Warning about `thread_local` (C++ coroutine truth): using `thread_local` variables in coroutine
-code is risky because a coroutine may resume on a different thread than the one that created the
-`thread_local` state. That can lead to reading a different instance than expected, or to accessing
-a `thread_local` object that has already been destroyed when a thread exits.
+> ⚠️ Note: C++ coroutines and `thread_local` do not mix well. A coroutine may resume on a different thread, so `thread_local` state may not be what you expect.
+
 
 ## Requirements
 
