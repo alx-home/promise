@@ -289,8 +289,8 @@ CVPromise ready;
 ready.Notify();
 
 // Reset the CVPromise:
-// - resolves any current waiters
 // - prepares the next wait cycle for future waiters
+// - If the current promise is still pending, this function is a no-op.
 ready.Reset();
 
 // -----------------------------------------------------------------------------
