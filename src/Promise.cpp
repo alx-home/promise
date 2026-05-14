@@ -23,7 +23,6 @@ SOFTWARE.
 */
 
 #include "details/Promise.inl"
-#include "details/Resolver.inl"
 
 namespace promise {
 
@@ -64,31 +63,6 @@ Reject::operator()(std::exception_ptr exception) const {
 Reject::
 operator bool() const {
    return rejected_;
-}
-
-/** @brief Creates a void resolver callback wrapper.
- *
- * @param resolver Shared resolver state used to resolve the promise.
- */
-Resolve<void>::Resolve(std::shared_ptr<Resolver<void>> resolver)
-   : resolver_(std::move(resolver)) {}
-
-/** @brief Resolves the underlying void promise.
- *
- * @return true when resolution succeeds.
- */
-bool
-Resolve<void>::operator()() const {
-   return resolver_->Resolve();
-}
-
-/** @brief Indicates whether the underlying resolver is done.
- *
- * @return true when the resolver reached a terminal state.
- */
-Resolve<void>::
-operator bool() const {
-   return resolver_->Done();
 }
 
 }  // namespace promise
