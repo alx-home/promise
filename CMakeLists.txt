@@ -4,6 +4,7 @@ project(alx-home_promise LANGUAGES CXX)
 
 include(CMakeParseArguments)
 include(FetchContent)
+include(CTest)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(PROMISE_BUILD_TESTS_DEFAULT ON)
