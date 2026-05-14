@@ -55,11 +55,11 @@ jobs:
               mkdir -p coverage
               gcovr \
                 --root . \
-                --filter './(src|include)/' \
                 --object-directory build \
-                --exclude-directories CMakeFiles \
+                --exclude 'build/CMakeFiles/[0-9]' \
+                --exclude 'build/' \
+                --gcov-executable gcov-14 \
                 --gcov-ignore-errors=all \
-                --verbose \
                 --sonarqube coverage/sonar-coverage.xml
 
          - name: Upload coverage artifact
