@@ -276,7 +276,35 @@ auto err = Promise<int>::Reject<std::runtime_error>("fail");
 auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast"); // Same
 
 // -----------------------------------------------------------------------------
-// Conditional‑variable style promise (StatePromise)
+// CVPromise — coroutine‑friendly condition‑variable style primitive
+// - co_await *ready     waits until the notifier signals
+// - Notify()            resolves all current waiters (one‑shot signal)
+// - Reset()             resolves current waiters AND arms the next wait cycle
+// - Destroying or rejecting the notifier throws CVPromise::End in waiters
+// -----------------------------------------------------------------------------
+
+CVPromise ready;
+
+// Notify all current waiters (one‑shot)
+ready.Notify();
+
+// Reset the CVPromise:
+// - resolves any current waiters
+// - prepares the next wait cycle for future waiters
+ready.Reset();
+
+// -----------------------------------------------------------------------------
+// CVPromise — coroutine‑friendly condition‑variable style primitive
+// - co_await *ready     waits until the notifier signals
+// - Notify()            resolves all current waiters (one‑shot signal)
+// - Reset()             resolves current waiters AND arms the next wait cycle
+// - Destroying or rejecting the notifier throws CVPromise::End in waiters
+// -----------------------------------------------------------------------------
+CVPromise ready;
+co_await *ready;  // Wait for Notify() or Reset()
+
+// -----------------------------------------------------------------------------
+// StatePromise — coroutine‑friendly state-transition primitive
 // - Ready()      signals the "ready" state (non‑terminal)
 // - Done()       signals the "done" state (terminal)
 // - Wait()       waits for either Ready or Done
