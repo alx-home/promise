@@ -164,26 +164,61 @@ WPromise Demo {[]() -> Promise<void> {
 #include <promise/StatePromise.h>
 #include <stdexcept>
 
+// -----------------------------------------------------------------------------
+// Create a resolver‑enabled promise using Create<T>()
+// - 'created' is the WPromise<int>
+// - 'resolve' is a pointer to the Resolve<int> object
+// - 'reject'  is a pointer to the Reject object
+// -----------------------------------------------------------------------------
 auto [created, resolve, reject] = promise::Create<int>();
-(*resolve)(7);
 
+(*resolve)(7);  // Resolve the promise with value 7
+reject->Apply<std::runtime_error>("Exception argument"); // Safe but ignored (already resolved)
+
+// -----------------------------------------------------------------------------
+// Same behavior using MakeRPromise()
+// - The lambda defines the resolver‑style coroutine body
+// - 'created2' is the resulting WPromise<int>
+// - 'resolve2' is the Resolve<int> handle
+// - 'reject2'  is the Reject handle
+// -----------------------------------------------------------------------------
+auto [created2, resolve2, reject2] = MakeRPromise(
+    [](Resolve<int> const&, Reject const&) -> Promise<int, true> {
+        co_return; // resolver‑style promises always return void
+    }
+);
+
+reject2->Apply<std::runtime_error>("Exception argument"); // Reject the promise
+(*resolve2)(123);  // Safe but ignored (already rejected)
+
+// -----------------------------------------------------------------------------
+// Awaiting 'all' produces a std::tuple<int, double, int>
+// - The void-producing task is awaited but omitted from the tuple
+// - Order is preserved: (created, double, void, int) → (int, double, int)
+// -----------------------------------------------------------------------------
 auto all = promise::All(
-	created,
-	[] -> double { return 1.0; },
-	[] -> Promise<void> { co_return; },
-	[] -> Promise<int> { co_return 2; }
+    created,                               // WPromise<int>
+    [] -> double { return 1.0; },          // Synchronous value
+    [] -> Promise<void> { co_return; },    // Coroutine returning void
+    [] -> Promise<int> { co_return 2; }    // Coroutine returning int
 );
+auto [a, b, c] = co_await all;
 
-auto [a, b, c] = co_await all; // std::tuple<int, double, int>, void result is awaited but not present in tuple
-
-
+// -----------------------------------------------------------------------------
+// Awaiting 'raced' yields a std::variant<int, double>
+// - The result corresponds to whichever task completes first
+// - The variant index matches the winning branch:
+//       0 → created (int)
+//       1 → coroutine returning int
+//       2 → synchronous double
+// -----------------------------------------------------------------------------
 auto raced = promise::Race(
-	created,
-	[] -> Promise<int> { co_return 1; },
-	[] -> double { return 2.5; }
+    created,                               // WPromise<int>
+    [] -> Promise<int> { co_return 1; },   // Coroutine returning int
+    [] -> double { return 2.5; }           // Synchronous value
 );
+auto raced_result = co_await raced;
 
-auto raced_result = co_await raced; // std::variant<int, double>
 
 // -----------------------------------------------------------------------------
 // 1. Promise without a resolver
@@ -230,19 +265,39 @@ WPromise prom{
     }
 };
 
-auto [prom2, resolve2, reject2] = MakeRPromise(
-	[](Resolve<int> const&, Reject const&) -> Promise<int, true> { co_return; }
-);
-(*resolve2)(123);
-
-
+// Create an already‑resolved Promise<int> with value 5
 auto ok = Promise<int>::Resolve(5);
-auto err = Promise<int>::Reject(std::make_exception_ptr(std::runtime_error("fail")));
-auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast");
 
+// Create an already‑rejected Promise<int> using a specific exception type
+auto err = Promise<int>::Reject<std::runtime_error>("fail");
+
+// Create an already‑rejected Promise<int> using MakeReject helper
+// (equivalent to Promise<int>::Reject<T>(...))
+auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast"); // Same
+
+// -----------------------------------------------------------------------------
+// Conditional‑variable style promise (StatePromise)
+// - Ready()      signals the "ready" state (non‑terminal)
+// - Done()       signals the "done" state (terminal)
+// - Wait()       waits for either Ready or Done
+// - WaitReady()  waits specifically for Ready
+// - WaitDone()   waits specifically for Done
+// - IsDone()     returns true only if the state has reached the Done state
+// - Reset()      returns the state to its initial (not ready, not done) form
+// -----------------------------------------------------------------------------
 StatePromise state;
-state.Ready();
-[[maybe_unused]] auto done = state.IsDone();
+
+state.Ready();               // Signal the Ready state
+state.Done();                // Transition to the Done state (terminal)
+
+co_await state.Wait();       // Waits for Ready or Done
+co_await state.WaitReady();  // Waits until Ready is signaled
+co_await state.WaitDone();   // Waits until Done is signaled
+
+[[maybe_unused]] bool done = state.IsDone();  // true only if Done() was signaled
+
+state.Reset();        // Reset to initial state (neither Ready nor Done)
+
 ```
 
 
