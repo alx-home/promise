@@ -14,7 +14,7 @@
 <h1 align="center">alx-home promise</h1>
 
 <p align="center">
-<strong>JavaScript‑style Promises for modern C++20 — coroutine‑native, fully thread‑safe, and designed for human‑friendly async code.</strong>
+<strong>JavaScript‑style Promises for modern c++23 — coroutine‑native, fully thread‑safe, and designed for human‑friendly async code.</strong>
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@ Chain with <code>Then</code>, recover with <code>Catch</code>, clean up with <co
 
 ## Why this library exists
 
-C++20 coroutines are powerful, but the ecosystem around them is still low‑level and hard to use.  
+c++23 coroutines are powerful, but the ecosystem around them is still low‑level and hard to use.  
 JavaScript, on the other hand, nailed the ergonomics of async programming years ago.
 
 This library brings that experience to C++:
@@ -93,7 +93,7 @@ You can safely resolve, reject, chain, and `co_await` promises from **any thread
 
 ## Requirements
 
-- C++20 compiler.
+- c++23 compiler.
 - CMake 3.20+.
 - Dependency: `alx-home::cpp_utils` (linked by CMake).
 
