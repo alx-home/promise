@@ -199,7 +199,7 @@ public:
     *
     * @return True if resolved or rejected.
     */
-   bool Done() const noexcept {
+   [[nodiscard]] bool Done() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -215,7 +215,7 @@ public:
     *
     * @return True if rejected.
     */
-   bool Rejected() const noexcept {
+   [[nodiscard]] bool Rejected() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -231,7 +231,7 @@ public:
     *
     * @return True if resolved.
     */
-   bool Resolved() const noexcept {
+   [[nodiscard]] bool Resolved() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -249,7 +249,7 @@ public:
     *
     * @warning Undefined if called before resolution.
     */
-   auto Value() const noexcept {
+   [[nodiscard]] auto Value() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -267,7 +267,7 @@ public:
     *
     * @return Stored exception pointer.
     */
-   std::exception_ptr Exception() const noexcept {
+   [[nodiscard]] std::exception_ptr Exception() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -285,7 +285,7 @@ public:
     *
     * @return Number of awaiters.
     */
-   std::size_t Awaiters() const noexcept {
+   [[nodiscard]] std::size_t Awaiters() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -301,7 +301,7 @@ public:
     *
     * @return Total number of awaiter registrations.
     */
-   std::size_t UseCount() const noexcept {
+   [[nodiscard]] std::size_t UseCount() const noexcept {
       return std::visit(
         [](auto const& details) constexpr {
            assert(details);
@@ -548,7 +548,7 @@ public:
     *
     * @return Shared pointer to a type-erased promise.
     */
-   auto ToPointer() && {
+   [[nodiscard]] auto ToPointer() && {
       return std::shared_ptr<TYPE>(static_cast<TYPE*>(new WPromise{std::move(details_)}));
    }
 

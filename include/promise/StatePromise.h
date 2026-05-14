@@ -66,7 +66,7 @@ public:
     *
     * @return True if the promise is done.
     */
-   bool IsDone() const;
+   [[nodiscard]] bool IsDone() const;
 
 private:
    CVPromise done_promise_;

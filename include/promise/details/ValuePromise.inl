@@ -72,7 +72,7 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   auto const& GetValue(this SELF&& self, Lock lock) {
+   [[nodiscard]] auto const& GetValue(this SELF&& self, Lock lock) {
       (void)lock;
       assert(self.resolver_);
       assert(self.resolver_->value_);
@@ -86,7 +86,7 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   auto const& GetValue(this SELF&& self) {
+   [[nodiscard]] auto const& GetValue(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
    }
@@ -100,7 +100,7 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   bool IsResolved(this SELF&& self, Lock lock) {
+   [[nodiscard]] bool IsResolved(this SELF&& self, Lock lock) {
       (void)lock;
       assert(self.resolver_);
       return self.resolver_->value_ != nullptr;
@@ -115,7 +115,7 @@ public:
     */
    template <class SELF>
       requires(IS_VOID)
-   bool IsResolved(this SELF&& self, Lock lock) {
+   [[nodiscard]] bool IsResolved(this SELF&& self, Lock lock) {
       (void)lock;
       assert(self.resolver_);
       return self.resolver_->value_is_set_;

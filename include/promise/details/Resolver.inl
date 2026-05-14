@@ -119,7 +119,7 @@ public:
     * @brief Check if the resolver is already resolved.
     * @return True if already resolved, false otherwise.
     */
-   bool Done() const {
+   [[nodiscard]] bool Done() const {
       if constexpr (std::is_void_v<T>) {
          return this->value_is_set_;
       } else {

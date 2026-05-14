@@ -94,7 +94,7 @@ struct Refcount {
  *
  * @return Scope guard that checks for memory leaks on destruction.
  */
-constexpr auto
+[[nodiscard]] constexpr auto
 Memcheck() {
    struct Check {
       Check() = default;

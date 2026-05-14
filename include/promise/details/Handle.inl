@@ -280,7 +280,7 @@ public:
     * @return True if resolved.
     */
    template <class SELF>
-   bool IsResolved(this SELF&& self, Lock lock) {
+   [[nodiscard]] bool IsResolved(this SELF&& self, Lock lock) {
       return self.ValuePromise::IsResolved(lock);
    }
 
@@ -292,7 +292,7 @@ public:
     * @return True if resolved or rejected.
     */
    template <class SELF>
-   bool IsDone(this SELF&& self, Lock lock) {
+   [[nodiscard]] bool IsDone(this SELF&& self, Lock lock) {
       assert(self.resolver_);
       return self.ValuePromise::IsResolved(lock) || (self.resolver_->exception_ != nullptr);
    }
@@ -328,7 +328,7 @@ public:
     * @return True if rejected.
     */
    template <class SELF>
-   bool IsRejected(this SELF&& self, Lock) {
+   [[nodiscard]] bool IsRejected(this SELF&& self, Lock) {
       assert(self.resolver_);
       return (self.resolver_->exception_ != nullptr);
    }
@@ -341,7 +341,7 @@ public:
     * @return True if rejected.
     */
    template <class SELF>
-   bool IsRejected(this SELF&& self) {
+   [[nodiscard]] bool IsRejected(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.IsRejected(lock);
    }
@@ -352,7 +352,7 @@ public:
     * @return True if resolved or rejected.
     */
    template <class SELF>
-   bool IsDone(this SELF&& self) {
+   [[nodiscard]] bool IsDone(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.IsDone(lock);
    }
@@ -431,7 +431,7 @@ public:
     *
     * @return True if the coroutine is complete.
     */
-   bool Done(Lock lock) const {
+   [[nodiscard]] bool Done(Lock lock) const {
       (void)lock;
       return handle_ == nullptr;
    }

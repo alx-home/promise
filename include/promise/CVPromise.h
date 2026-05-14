@@ -52,18 +52,18 @@ public:
    virtual ~CVPromise();
 
    /** @brief Converts the CVPromise to a WPromise<void>. */
-   operator WPromise<void>() const;
+   [[nodiscard]] operator WPromise<void>() const;
 
    /** @brief Gets a WPromise<void> that resolves when the CVPromise is resolved or rejected.
     *
     * @return A WPromise<void> that resolves when the CVPromise is resolved or rejected.
     */
-   WPromise<void> Wait() const;
+   [[nodiscard]] WPromise<void> Wait() const;
 
    /** @brief Gets the underlying WPromise<void>. */
-   WPromise<void> operator*() const;
+   [[nodiscard]] WPromise<void> operator*() const;
    /** @brief Gets a pointer to the underlying WPromise<void>. */
-   WPromise<void> const* operator->() const;
+   [[nodiscard]] WPromise<void> const* operator->() const;
 
    /** @brief Notifies the promise, resolving it if it hasn't been resolved or rejected. */
    void Notify();

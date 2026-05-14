@@ -228,7 +228,7 @@ private:
     *
     * @return Stored exception pointer.
     */
-   auto const& GetException(Lock lock) {
+   [[nodiscard]] auto const& GetException(Lock lock) {
       (void)lock;
       assert(this->resolver_);
       return this->resolver_->exception_;
@@ -296,7 +296,7 @@ private:
     *
     * @return Number of awaiters.
     */
-   std::size_t Awaiters() const {
+   [[nodiscard]] std::size_t Awaiters() const {
       std::shared_lock lock{this->mutex_};
       return this->awaiters_.size();
    }
@@ -306,7 +306,7 @@ private:
     *
     * @return Total number of awaiter registrations.
     */
-   std::size_t UseCount() const noexcept { return use_count_; }
+   [[nodiscard]] std::size_t UseCount() const noexcept { return use_count_; }
 
    /**
     * @brief Chain a continuation to run on resolve.

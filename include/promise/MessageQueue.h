@@ -55,7 +55,7 @@ public:
     *
     * @return The ID of the thread running the message queue.
     */
-   std::thread::id ThreadId() const;
+   [[nodiscard]] std::thread::id ThreadId() const;
 };
 
 }  // namespace promise
