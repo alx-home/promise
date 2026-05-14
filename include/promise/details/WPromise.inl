@@ -247,7 +247,7 @@ template <class T>
 [[nodiscard]] cref_or_void_t<T>
 WPromise<T>::Value() const noexcept {
    return std::visit(
-     [](auto const& details) constexpr {
+     [](auto const& details) constexpr -> cref_or_void_t<T> {
         assert(details);
         std::shared_lock lock{details->mutex_};
 
