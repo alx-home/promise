@@ -7,6 +7,10 @@
     </a>
 </p>
 
+<p align="center">
+	<img src=".github/logo.svg" alt="alx-home promise logo" width="560">
+</p>
+
 <h1 align="center">alx-home promise</h1>
 
 <p align="center">
