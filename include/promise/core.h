@@ -27,9 +27,25 @@ SOFTWARE.
 #include "core/WPromise.h"
 #include "core/helpers.h"
 
+/**
+ * @brief Type alias for promise implementation details.
+ *
+ * @tparam T The value type that the promise resolves to (defaults to void).
+ * @tparam WITH_RESOLVER Whether the promise uses an external resolver (defaults to false).
+ *
+ * This is an alias to the internal promise implementation details class.
+ */
 template <class T = void, bool WITH_RESOLVER = false>
 using Promise = promise::details::IPromise<T, WITH_RESOLVER>;
 
+/**
+ * @brief Type alias for promise implementation with ownership.
+ *
+ * @tparam T The value type that the promise resolves to (defaults to void).
+ *
+ * This is a wrapper around the internal promise implementation that manages
+ * shared ownership and provides awaitable semantics.
+ */
 template <class T = void>
 using WPromise = promise::details::WPromise<T>;
 

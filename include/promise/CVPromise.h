@@ -32,6 +32,12 @@ SOFTWARE.
 /** @brief A promise that can be waited on, notified, and rejected. */
 struct CVPromise {
 public:
+   /**
+    * @brief Exception raised when a CVPromise is destroyed.
+    *
+    * This exception is used to reject pending promises when the CVPromise
+    * is destroyed, ensuring that any waiting coroutines are awakened.
+    */
    struct End : std::runtime_error {
       End()
          : std::runtime_error("Promise ended") {}

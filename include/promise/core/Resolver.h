@@ -41,12 +41,25 @@ class Handle;
 template <class T>
 class ValuePromise;
 
+/**
+ * @brief Helper template to store resolver values.
+ *
+ * @tparam T The value type to store.
+ *
+ * This template provides a way to store values of type T in a unique_ptr
+ * to handle the case where T itself is optional.
+ */
 template <class T>
 struct ResolverValue {
    // unique_ptr to handle std::optional<std::optional>...
    std::unique_ptr<T> value_{};
 };
 
+/**
+ * @brief Specialization of ResolverValue for void types.
+ *
+ * For void types, we simply track whether a value has been set using a boolean flag.
+ */
 template <>
 struct ResolverValue<void> {
    bool value_is_set_{false};

@@ -36,11 +36,23 @@ SOFTWARE.
 
 namespace promise {
 
+/**
+ * @brief Variant type for different shared or exclusive lock types.
+ *
+ * This type can hold a reference to either a shared lock, unique lock,
+ * or lock guard, providing flexibility for different synchronization contexts.
+ */
 using Lock = std::variant<
   std::reference_wrapper<std::shared_lock<std::shared_mutex>>,
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
+/**
+ * @brief Variant type for exclusive lock types.
+ *
+ * This type can hold a reference to either a unique lock or a lock guard,
+ * providing flexibility for exclusive synchronization contexts.
+ */
 using UniqueLock = std::variant<
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;

@@ -59,9 +59,8 @@ public:
     * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
     *
     * @tparam EXCEPTION Exception type to construct.
-    * @tparam ARGS Constructor arguments for the exception.
     *
-    * @param args Arguments forwarded to the exception constructor.
+    * @param exception Exception to store.
     *
     * @return True if this call rejected the promise, false if it was already rejected.
     */
