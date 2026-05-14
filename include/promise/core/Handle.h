@@ -61,13 +61,13 @@ class Handle : public ValuePromise<T> {
 protected:
    struct PromiseType;
    /** @brief Coroutine handle type for this promise. */
-   using handle_type  = std::coroutine_handle<PromiseType>;
+   using handle_type = std::coroutine_handle<PromiseType>;
    /** @brief Promise implementation type (resolver-based or resolver-less). */
-   using Promise      = details::IPromise<T, WITH_RESOLVER>;
+   using Promise = details::IPromise<T, WITH_RESOLVER>;
    /** @brief Value promise base class type. */
    using ValuePromise = ValuePromise<T>;
    /** @brief Lock guard type for shared mutex synchronization. */
-   using Locker       = std::unique_lock<std::shared_mutex>;
+   using Locker = std::unique_lock<std::shared_mutex>;
    /**
     * @brief Unlock helper for lock guards.
     */
@@ -205,7 +205,8 @@ protected:
       FUN&& await_transform(FUN&& fun);
 
       friend Promise;
-      /** @brief Grants the enclosing Handle<T, WITH_RESOLVER> access to PromiseType's private members. */
+      /** @brief Grants the enclosing Handle<T, WITH_RESOLVER> access to PromiseType's private
+       * members. */
       friend Handle;
 
    private:
@@ -335,12 +336,12 @@ public:
 
 protected:
    /** @brief Shared mutex protecting promise state. */
-   mutable std::shared_mutex           mutex_{};
+   mutable std::shared_mutex mutex_{};
    /** @brief Condition variable for notifying state changes. */
    mutable std::condition_variable_any cv_{};
 
    /** @brief Coroutine handle for the promise execution context. */
-   handle_type                                         handle_{nullptr};
+   handle_type handle_{nullptr};
    /** @brief Shared ownership of the promise implementation. */
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
    /**
@@ -350,7 +351,7 @@ protected:
     * WITH_RESOLVER. It is only externally exposed as a resolver when
     * WITH_RESOLVER is true.
     */
-   std::shared_ptr<Resolver<T>>                        resolver_{nullptr};
+   std::shared_ptr<Resolver<T>> resolver_{nullptr};
 
 public:
    /** @brief Promise implementation interface. */

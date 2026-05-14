@@ -86,11 +86,11 @@ protected:
    /** @brief Value promise base class type. */
    using ValuePromise = Handle<T, WITH_RESOLVER>::ValuePromise;
    /** @brief Coroutine handle type for this promise. */
-   using handle_type  = Handle<T, WITH_RESOLVER>::handle_type;
+   using handle_type = Handle<T, WITH_RESOLVER>::handle_type;
    /** @brief Lock guard type for shared mutex synchronization. */
-   using Locker       = typename Handle<T, WITH_RESOLVER>::Locker;
+   using Locker = typename Handle<T, WITH_RESOLVER>::Locker;
    /** @brief Unlock helper for lock guards. */
-   using Unlock       = typename Handle<T, WITH_RESOLVER>::Unlock;
+   using Unlock = typename Handle<T, WITH_RESOLVER>::Unlock;
 
    static constexpr bool IS_VOID = std::is_void_v<T>;
 
