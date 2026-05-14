@@ -76,6 +76,7 @@ class Promise
 #endif  // PROMISE_MEMCHECK
 {
 public:
+   /** @brief Coroutine promise_type produced by this details implementation. */
    using promise_type = Handle<T, WITH_RESOLVER>::PromiseType;
 
 protected:
@@ -108,10 +109,17 @@ public:
     */
    ~Promise() override;
 
-   Promise(Promise&& rhs) noexcept            = delete;
+   /** @brief Non-movable promise details type. */
+   Promise(Promise&& rhs) noexcept = delete;
+
+   /** @brief Non-movable promise details type. */
    Promise& operator=(Promise&& rhs) noexcept = delete;
-   Promise(Promise const&)                    = delete;
-   Promise& operator=(Promise const&)         = delete;
+
+   /** @brief Non-copyable promise details type. */
+   Promise(Promise const&) = delete;
+
+   /** @brief Non-copyable promise details type. */
+   Promise& operator=(Promise const&) = delete;
 
 private:
    /**

@@ -53,10 +53,21 @@ template <class... PROMISE>
 static constexpr auto All(PROMISE&&... promise);
 
 namespace details {
+/**
+ * @brief Internal promise details implementation.
+ *
+ * @tparam T Promise value type.
+ * @tparam WITH_RESOLVER Whether the promise is externally resolved.
+ */
 template <class T, bool WITH_RESOLVER = false>
 class Promise;
-}
+}  // namespace details
 
+/**
+ * @brief Shared resolver state used by resolve/reject handles.
+ *
+ * @tparam T Promise value type.
+ */
 template <class T>
 class Resolver;
 }  // namespace promise

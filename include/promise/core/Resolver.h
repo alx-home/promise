@@ -65,11 +65,17 @@ struct ResolverValue<void> {
    bool value_is_set_{false};
 };
 
+/**
+ * @brief Shared resolver state for Promise<T>.
+ *
+ * @tparam T Promise value type.
+ */
 template <class T>
 class Resolver
    : public std::enable_shared_from_this<Resolver<T>>
    , private ResolverValue<T> {
 public:
+   /** @brief Weak reference to resolver-backed or direct promise state. */
    using Promise = std::
      variant<std::weak_ptr<details::Promise<T, true>>, std::weak_ptr<details::Promise<T, false>>>;
 
@@ -77,8 +83,14 @@ private:
    Resolver() = default;
 
 public:
+   /** @brief Virtual destructor for shared resolver state. */
    virtual ~Resolver() = default;
 
+   /**
+    * @brief Create resolver state and its public resolve/reject handles.
+    *
+    * @return Tuple of resolver state, resolve handle, and reject handle.
+    */
    static constexpr std::
      tuple<std::shared_ptr<Resolver<T>>, std::shared_ptr<Resolve<T>>, std::shared_ptr<Reject>>
      Create();

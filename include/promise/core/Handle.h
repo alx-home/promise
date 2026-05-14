@@ -46,9 +46,16 @@ namespace promise {
  * This class allows promises to be awaited without knowing their concrete type.
  */
 struct Function {
+   /** @brief Virtual destructor for type erasure. */
    virtual ~Function() = default;
 };
 
+/**
+ * @brief Base coroutine handle implementation used by promise details.
+ *
+ * @tparam T Promise value type.
+ * @tparam WITH_RESOLVER Whether resolution is driven by an external resolver.
+ */
 template <class T, bool WITH_RESOLVER>
 class Handle : public ValuePromise<T> {
 protected:
@@ -144,6 +151,7 @@ protected:
       struct InitSuspend {
          Parent& self_;
 
+         /** @brief Check whether initial suspension can be skipped. */
          [[nodiscard]] constexpr bool await_ready() const noexcept;
 
          /**
@@ -288,15 +296,23 @@ public:
      std::shared_ptr<details::Promise<T, WITH_RESOLVER>>&& self
    ) &&;
 
+   /** @brief Type-erased detach hook used by VPromise. */
    void VDetach() && override;
 
+   /** @brief Destroy the handle and release coroutine state. */
    ~Handle();
 
+   /** @brief Non-movable handle type. */
    Handle(Handle&& rhs) noexcept = delete;
-   Handle(Handle const& rhs)     = delete;
 
+   /** @brief Non-copyable handle type. */
+   Handle(Handle const& rhs) = delete;
+
+   /** @brief Non-movable handle type. */
    Handle& operator=(Handle&& rhs) noexcept = delete;
-   Handle& operator=(Handle const& rhs)     = delete;
+
+   /** @brief Non-copyable handle type. */
+   Handle& operator=(Handle const& rhs) = delete;
 
    /**
     * @brief Check if the coroutine handle is cleared.

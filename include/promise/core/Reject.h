@@ -44,6 +44,13 @@ private:
    Reject(std::function<void(std::exception_ptr)> impl);
 
 public:
+   /**
+    * @brief Create a shared reject handle.
+    *
+    * @param impl Callback invoked when rejecting.
+    *
+    * @return Shared reject handle.
+    */
    static std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl);
 
    /**

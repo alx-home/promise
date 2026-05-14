@@ -44,11 +44,13 @@ public:
     * @return A promise that resolves when the state promise is ready.
     */
    [[nodiscard]] WPromise<void> WaitReady() const;
+
    /** @brief Waits for the promise to be done.
     *
     * @return A promise that resolves when the state promise is done.
     */
    [[nodiscard]] WPromise<void> WaitDone() const;
+
    /** @brief Waits for the promise to be either ready or done.
     *
     * @return A promise that resolves when the state promise is either ready or done.
@@ -57,8 +59,10 @@ public:
 
    /** @brief Marks the promise as ready. */
    void Ready();
+
    /** @brief Marks the promise as done. */
    void Done();
+
    /** @brief Resets the promise to its initial state, allowing it to be reused. */
    void Reset();
 
