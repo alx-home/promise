@@ -47,25 +47,47 @@ namespace promise::details {
 template <class T>
 class WPromise : public promise::VPromise {
 public:
-   using Promise  = promise::details::Promise<T, false>;
+   /** @brief Promise details type for non-resolver promises. */
+   using Promise = promise::details::Promise<T, false>;
+   /** @brief Promise details type for resolver-backed promises. */
    using RPromise = promise::details::Promise<T, true>;
 
-   using Details     = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
+   /** @brief Shared variant over non-resolver and resolver-backed details. */
+   using Details = std::variant<std::shared_ptr<Promise>, std::shared_ptr<RPromise>>;
+   /** @brief Promise resolved value type. */
    using return_type = T;
 
-   WPromise(WPromise const& other)                = default;
-   WPromise& operator=(WPromise const& other)     = default;
-   WPromise(WPromise&& other) noexcept            = default;
+   /** @brief Copy constructor. */
+   WPromise(WPromise const& other) = default;
+
+   /** @brief Copy assignment. */
+   WPromise& operator=(WPromise const& other) = default;
+
+   /** @brief Move constructor. */
+   WPromise(WPromise&& other) noexcept = default;
+
+   /** @brief Move assignment. */
    WPromise& operator=(WPromise&& other) noexcept = default;
 
+   /** @brief Destroy this promise handle. */
    ~WPromise();
 
+   /**
+    * @brief Construct a promise handle from a callable.
+    *
+    * @param fun Callable used to create/start the promise.
+    */
    template <class FUN>
       requires(function_constructible<FUN>)
    WPromise(FUN&& fun);
 
    class VAwaitable : public VPromise::Awaitable {
    public:
+      /**
+       * @brief Construct a type-erased awaitable from promise details.
+       *
+       * @param details Shared promise details.
+       */
       explicit VAwaitable(Details details);
 
       /**
@@ -95,6 +117,11 @@ public:
 
    class Awaitable {
    public:
+      /**
+       * @brief Construct an awaitable from promise details.
+       *
+       * @param details Shared promise details.
+       */
       explicit Awaitable(Details details);
 
       /**
@@ -123,7 +150,16 @@ public:
       Details details_;
    };
 
-   Awaitable        operator co_await();
+   /** @brief Build an awaitable adapter for this promise. */
+   Awaitable operator co_await();
+
+   /**
+    * @brief Free-function co_await adapter.
+    *
+    * @param promise Promise to await.
+    *
+    * @return Awaitable adapter over the same shared state.
+    */
    friend Awaitable operator co_await(WPromise const& promise) {
       return Awaitable{promise.details_};
    }
@@ -291,6 +327,11 @@ public:
    template <class EXCEPTION, class... ARGS>
    static constexpr WPromise<T> Reject(ARGS&&... args);
 
+   /**
+    * @brief Create a pending promise with resolve and reject handles.
+    *
+    * @return Tuple of promise handle, resolve handle, and reject handle.
+    */
    static constexpr std::
      tuple<WPromise<T>, std::shared_ptr<promise::Resolve<T>>, std::shared_ptr<promise::Reject>>
      Create();
@@ -354,10 +395,12 @@ private:
    friend class ::promise::details::Promise;
 };
 
+/** @brief Deduction guide for promise-returning callables. */
 template <class FUN>
    requires(function_constructible<FUN> && IS_PROMISE_FUNCTION<FUN>)
 WPromise(FUN&& fun) -> WPromise<return_or_void_t<return_t<FUN>>>;
 
+/** @brief Deduction guide for value-returning callables. */
 template <class FUN>
    requires(function_constructible<FUN> && !IS_PROMISE_FUNCTION<FUN>)
 WPromise(FUN&& fun) -> WPromise<WReturn<FUN>>;
@@ -371,10 +414,14 @@ WPromise(FUN&& fun) -> WPromise<WReturn<FUN>>;
 template <class T, bool WITH_RESOLVER>
 class IPromise : public WPromise<T> {
 public:
-   using Parent       = WPromise<T>;
-   using Details      = promise::details::Promise<T, WITH_RESOLVER>;
-   using promise_type = Details::promise_type;
-   using return_type  = T;
+   /** @brief Parent public promise handle type. */
+   using Parent = WPromise<T>;
+   /** @brief Concrete details type for this resolver mode. */
+   using Details = promise::details::Promise<T, WITH_RESOLVER>;
+   /** @brief Coroutine promise_type associated with this handle. */
+   using promise_type = typename Details::promise_type;
+   /** @brief Promise resolved value type. */
+   using return_type = T;
 
    /**
     * @brief co_await operator for resolver-less promises.

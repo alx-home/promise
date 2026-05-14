@@ -53,6 +53,13 @@ private:
    Resolve(std::shared_ptr<Resolver<void>> resolver);
 
 public:
+   /**
+    * @brief Create a shared resolve handle for Promise<void>.
+    *
+    * @param resolver Shared resolver state.
+    *
+    * @return Shared resolve handle.
+    */
    static std::shared_ptr<Resolve<void>> Create(std::shared_ptr<Resolver<void>> resolver);
 
    /**
@@ -88,6 +95,13 @@ private:
    Resolve(std::shared_ptr<Resolver<T>> resolver);
 
 public:
+   /**
+    * @brief Create a shared resolve handle for Promise<T>.
+    *
+    * @param resolver Shared resolver state.
+    *
+    * @return Shared resolve handle.
+    */
    static std::shared_ptr<Resolve<T>> Create(std::shared_ptr<Resolver<T>> resolver);
 
    /**

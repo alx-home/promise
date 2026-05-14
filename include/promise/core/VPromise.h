@@ -35,22 +35,42 @@ namespace promise {
  */
 class VPromise {
 public:
-   VPromise()                               = default;
-   VPromise(VPromise const&)                = default;
-   VPromise(VPromise&&) noexcept            = default;
-   VPromise& operator=(VPromise const&)     = default;
+   /** @brief Default constructor. */
+   VPromise() = default;
+
+   /** @brief Copy constructor. */
+   VPromise(VPromise const&) = default;
+
+   /** @brief Move constructor. */
+   VPromise(VPromise&&) noexcept = default;
+
+   /** @brief Copy assignment. */
+   VPromise& operator=(VPromise const&) = default;
+
+   /** @brief Move assignment. */
    VPromise& operator=(VPromise&&) noexcept = default;
 
+   /** @brief Virtual destructor for type erasure. */
    virtual ~VPromise() = default;
 
    class Awaitable {
    public:
-      Awaitable()          = default;
+      /** @brief Default constructor. */
+      Awaitable() = default;
+
+      /** @brief Virtual destructor for polymorphic awaitables. */
       virtual ~Awaitable() = default;
 
-      Awaitable(Awaitable const&)                = default;
-      Awaitable& operator=(Awaitable const&)     = default;
-      Awaitable(Awaitable&&) noexcept            = default;
+      /** @brief Copy constructor. */
+      Awaitable(Awaitable const&) = default;
+
+      /** @brief Copy assignment. */
+      Awaitable& operator=(Awaitable const&) = default;
+
+      /** @brief Move constructor. */
+      Awaitable(Awaitable&&) noexcept = default;
+
+      /** @brief Move assignment. */
       Awaitable& operator=(Awaitable&&) noexcept = default;
 
       /**
