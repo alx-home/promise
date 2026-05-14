@@ -165,7 +165,7 @@ WPromise Demo {[]() -> Promise<void> {
 #include <stdexcept>
 
 auto [created, resolve, reject] = promise::Create<int>();
-resolve->operator()(7);
+(*resolve)(7);
 
 auto all = promise::All(
 	created,
