@@ -119,6 +119,11 @@ struct return_<T> {
 template <class FUN>
 using return_t = typename return_<std::remove_cvref_t<FUN>>::type;
 
+/**
+ * @brief Concept that checks whether a type has a deducible return type.
+ *
+ * @tparam T Type to inspect.
+ */
 template <class T>
 concept HasReturn = requires { typename return_<std::remove_cvref_t<T>>::type; };
 
@@ -152,6 +157,11 @@ struct ReturnOrVoid<T> {
    using type = return_t<T>;
 };
 
+/**
+ * @brief Return type alias that falls back to void when no return type can be deduced.
+ *
+ * @tparam T Type to inspect.
+ */
 template <class T>
 using return_or_void_t = typename ReturnOrVoid<T>::type;
 
@@ -467,13 +477,29 @@ struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> >=
      return_t<FUN>>;
 };
 
+/**
+ * @brief Return type of a callable adapted for promise wrappers.
+ *
+ * @tparam FUN Callable type.
+ */
 template <class FUN>
 using WReturn = typename WReturnHelper<std::remove_cvref_t<FUN>>::type;
 
+/**
+ * @brief Return promise type produced by Then continuations.
+ *
+ * @tparam FUN Continuation callable type.
+ */
 template <class FUN>
 using ThenReturn = details::WPromise<
   std::conditional_t<IS_PROMISE_FUNCTION<FUN>, return_or_void_t<return_t<FUN>>, return_t<FUN>>>;
 
+/**
+ * @brief Intermediate return promise type produced by Catch continuations.
+ *
+ * @tparam T Original promise value type.
+ * @tparam T2 Catch continuation value type.
+ */
 template <class T, class T2>
 using CatchReturn2 = std::conditional_t<
   std::is_void_v<T2> && std::is_void_v<T>,
@@ -489,11 +515,22 @@ using CatchReturn2 = std::conditional_t<
         details::WPromise<T2>,
         details::WPromise<std::variant<T2, T>>>>>>;
 
+/**
+ * @brief Return promise type produced by Catch continuations.
+ *
+ * @tparam T Original promise value type.
+ * @tparam FUN Catch continuation callable type.
+ */
 template <class T, class FUN>
 using CatchReturn = CatchReturn2<
   T,
   std::conditional_t<IS_PROMISE_FUNCTION<FUN>, return_or_void_t<return_t<FUN>>, return_t<FUN>>>;
 
+/**
+ * @brief Return promise type produced by Finally continuations.
+ *
+ * @tparam T Original promise value type.
+ */
 template <class T>
 using FinallyReturn = details::WPromise<T>;
 
@@ -517,6 +554,11 @@ struct CRefOrVoid<void> {
    using type = void;
 };
 
+/**
+ * @brief Alias to a const reference for non-void types, or void for void.
+ *
+ * @tparam T Value type.
+ */
 template <class T>
 using cref_or_void_t = typename CRefOrVoid<T>::type;
 

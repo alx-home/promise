@@ -53,6 +53,7 @@ public:
    /** @brief Virtual destructor for type erasure. */
    virtual ~VPromise() = default;
 
+   /** @brief Type-erased awaitable interface for promises. */
    class Awaitable {
    public:
       /** @brief Default constructor. */
