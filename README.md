@@ -55,9 +55,9 @@ If you know JavaScript promises, you already know how to use this library — bu
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Basic usage](#basic-usage)
+- [Quick card](#quick-card)
 - [Promise handle types](#promise-handle-types)
 - [`MakePromise` scope and coroutine lambda rule](#makepromise-scope-and-coroutine-lambda-rule)
-- [Quick card](#quick-card)
 - [Forwarding arguments into `MakePromise`](#forwarding-arguments-into-makepromise)
 - [Lambda capture lifetime](#lambda-capture-lifetime)
 - [Resolver-style promises](#resolver-style-promises)
@@ -155,48 +155,6 @@ WPromise Demo {[]() -> Promise<void> {
 }};
 ```
 
-## Promise handle types
-
-`Promise<T>` is the coroutine return type you write in function signatures. `WPromise<T>` is an
-owning, awaitable handle you can store, pass around, or convert to type-erased pointers via
-`ToPointer()` when you need to keep promises in containers or interfaces. `VPromise` uses `V` for
-Virtual (type-erased base class), and `WPromise` uses `W` for Wrapped (owning handle).
-
-Important: `WPromise<T>` is RAII-owning. If a live, non-detached promise reaches its destructor
-before it is done, the destructor waits for completion. This helps prevent unfinished async work
-from being dropped silently, but it also means true fire-and-forget flows should call `Detach()`
-explicitly.
-
-If a function returns a promise handle (not a coroutine), use `WPromise<T>`.
-There is no way in C++ to distinguish a function returning a promise from a coroutine promise
-type in the signature alone, so `Promise<T>` is reserved for coroutine return types.
-
-## `MakePromise` scope and coroutine lambda rule
-
-Use `MakePromise(...)` as the boundary that creates and owns async work from callables/lambdas.
-In practice, `[]() -> Promise<T> { ... }` coroutine lambdas should not be used standalone outside
-`MakePromise(...)` or a `WPromise<T>` wrapper.
-
-Exception: inside a coroutine that already returns `Promise<U>`, you can `co_await` a function that
-returns a promise. The await flow is handled by promise awaitables and the resulting state is
-managed through `WPromise` internals.
-
-```cpp
-#include <promise/promise.h>
-
-// Allowed form 1: wrap coroutine lambdas with MakePromise.
-auto wrapped1 = MakePromise([]() -> Promise<int> { co_return 42; });
-
-// Allowed form 2: wrap coroutine lambdas with WPromise.
-WPromise wrapped2{[]() -> Promise<int> {
-	co_return 42;
-}};
-
-// Invalid: raw standalone coroutine lambda returning Promise (will not work as expected).
-// auto raw = []() -> Promise<int> { co_return 42; };
-```
-
-
 ## Quick Card
 
 ```cpp
@@ -245,6 +203,49 @@ StatePromise state;
 state.Ready();
 [[maybe_unused]] auto done = state.IsDone();
 ```
+
+
+## Promise handle types
+
+`Promise<T>` is the coroutine return type you write in function signatures. `WPromise<T>` is an
+owning, awaitable handle you can store, pass around, or convert to type-erased pointers via
+`ToPointer()` when you need to keep promises in containers or interfaces. `VPromise` uses `V` for
+Virtual (type-erased base class), and `WPromise` uses `W` for Wrapped (owning handle).
+
+Important: `WPromise<T>` is RAII-owning. If a live, non-detached promise reaches its destructor
+before it is done, the destructor waits for completion. This helps prevent unfinished async work
+from being dropped silently, but it also means true fire-and-forget flows should call `Detach()`
+explicitly.
+
+If a function returns a promise handle (not a coroutine), use `WPromise<T>`.
+There is no way in C++ to distinguish a function returning a promise from a coroutine promise
+type in the signature alone, so `Promise<T>` is reserved for coroutine return types.
+
+## `MakePromise` scope and coroutine lambda rule
+
+Use `MakePromise(...)` as the boundary that creates and owns async work from callables/lambdas.
+In practice, `[]() -> Promise<T> { ... }` coroutine lambdas should not be used standalone outside
+`MakePromise(...)` or a `WPromise<T>` wrapper.
+
+Exception: inside a coroutine that already returns `Promise<U>`, you can `co_await` a function that
+returns a promise. The await flow is handled by promise awaitables and the resulting state is
+managed through `WPromise` internals.
+
+```cpp
+#include <promise/promise.h>
+
+// Allowed form 1: wrap coroutine lambdas with MakePromise.
+auto wrapped1 = MakePromise([]() -> Promise<int> { co_return 42; });
+
+// Allowed form 2: wrap coroutine lambdas with WPromise.
+WPromise wrapped2{[]() -> Promise<int> {
+	co_return 42;
+}};
+
+// Invalid: raw standalone coroutine lambda returning Promise (will not work as expected).
+// auto raw = []() -> Promise<int> { co_return 42; };
+```
+
 
 ## Forwarding arguments into `MakePromise`
 
