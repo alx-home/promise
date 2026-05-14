@@ -4,16 +4,62 @@ on:
    push:
       branches:
          - master
+      tags:
+         - "*"
+   workflow_dispatch:
 
 jobs:
    build:
-      name: Build and analyze
+      name: Build, test, coverage and analyze
       runs-on: ubuntu-latest
 
       steps:
          - uses: actions/checkout@v4
            with:
               fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+
+         - name: Install build and coverage tools
+           run: |
+              sudo apt-get update
+              sudo apt-get install -y cmake ninja-build g++
+              python3 -m pip install --upgrade pip gcovr
+
+         - name: Configure
+           run: >-
+              cmake
+              -S .
+              -B build
+              -G Ninja
+              -DCMAKE_BUILD_TYPE=Debug
+              -DPROMISE_BUILD_TESTS=ON
+              -DCMAKE_CXX_FLAGS="--coverage"
+              -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+
+         - name: Build tests
+           run: cmake --build build --target promise_test --config Debug
+
+         - name: Run tests
+           run: ctest --test-dir build --output-on-failure
+
+         - name: Validate tag points to master history
+           if: startsWith(github.ref, 'refs/tags/')
+           run: |
+              git fetch origin master --depth=1
+              git merge-base --is-ancestor "$GITHUB_SHA" "origin/master"
+
+         - name: Generate SonarQube coverage report
+           run: |
+              mkdir -p coverage
+              gcovr \
+                --root . \
+                --filter src \
+                --sonarqube coverage/sonar-coverage.xml
+
+         - name: Upload coverage artifact
+           uses: actions/upload-artifact@v4
+           with:
+              name: promise-sonarqube-coverage
+              path: coverage/sonar-coverage.xml
 
          - name: Decode certificate
            run: |
@@ -27,3 +73,33 @@ jobs:
               SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
               SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
               SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
+
+         - name: Configure release build
+           if: startsWith(github.ref, 'refs/tags/')
+           run: >-
+              cmake
+              -S .
+              -B build-release
+              -G Ninja
+              -DCMAKE_BUILD_TYPE=Release
+              -DPROMISE_BUILD_TESTS=OFF
+
+         - name: Build release library
+           if: startsWith(github.ref, 'refs/tags/')
+           run: cmake --build build-release --target alx-home_promise --config Release
+
+         - name: Collect release library artifacts
+           if: startsWith(github.ref, 'refs/tags/')
+           run: |
+              mkdir -p release-artifacts
+              find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
+                cp "$lib" release-artifacts/
+              done
+              test -n "$(ls -A release-artifacts)"
+
+         - name: Upload release library artifacts
+           if: startsWith(github.ref, 'refs/tags/')
+           uses: actions/upload-artifact@v4
+           with:
+              name: promise-release-lib-${{ github.ref_name }}
+              path: release-artifacts/
