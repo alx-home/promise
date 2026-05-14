@@ -21,7 +21,7 @@ jobs:
          - name: Install build and coverage tools
            run: |
               sudo apt-get update
-              sudo apt-get install -y cmake ninja-build gcc-14 g++-14 gcov-14
+              sudo apt-get install -y cmake ninja-build gcc-14 g++-14 gcov
               python3 -m pip install --upgrade pip gcovr
 
          - name: Configure
@@ -34,8 +34,9 @@ jobs:
               -DCMAKE_CXX_COMPILER=g++-14
               -DCMAKE_BUILD_TYPE=Debug
               -DPROMISE_BUILD_TESTS=ON
-              -DCMAKE_CXX_FLAGS="--coverage"
+              -DCMAKE_CXX_FLAGS="-O0 --coverage -fprofile-arcs -ftest-coverage"
               -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+              -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
 
          - name: Build tests
            run: cmake --build build --target promise_test --config Debug
@@ -54,10 +55,10 @@ jobs:
               mkdir -p coverage
               gcovr \
                 --root . \
-                --filter src \
+                --object-directory build \
                 --exclude-directories CMakeFiles \
-                --gcov-executable gcov-14 \
-                --gcov-ignore-errors=version_mismatch \
+                --gcov-ignore-errors=all \
+                --verbose \
                 --sonarqube coverage/sonar-coverage.xml
 
          - name: Upload coverage artifact
