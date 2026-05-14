@@ -301,7 +301,7 @@ ready.Reset();
 // - Destroying or rejecting the notifier throws CVPromise::End in waiters
 // -----------------------------------------------------------------------------
 CVPromise ready;
-co_await *ready;  // Wait for Notify() or Reset()
+co_await *ready;  // Wait for Notify()
 
 // -----------------------------------------------------------------------------
 // StatePromise — coroutine‑friendly state-transition primitive
