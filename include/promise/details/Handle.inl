@@ -24,10 +24,10 @@ SOFTWARE.
 
 #pragma once
 
-#include "core/Handle.h"
+#include "../core/Handle.h"
 
-#include <utils/Scoped.h>
 #include <cassert>
+#include <utils/Scoped.h>
 
 namespace promise {
 
@@ -155,8 +155,8 @@ template <class FUN>
    requires(IS_PROMISE_FUNCTION<FUN>)
 details::WPromise<return_t<return_t<FUN>>>
 Handle<T, WITH_RESOLVER>::PromiseType::await_transform(FUN&& fun) {
-   // If the awaitable is a promise function, we create a new promise for it and return it as
-   // an awaitable.
+   // If the awaitable is a promise function, we create a new promise for it and
+   // return it as an awaitable.
    return std::forward<FUN>(fun);
 }
 
@@ -165,8 +165,8 @@ template <class FUN>
    requires(!IS_PROMISE_FUNCTION<FUN>)
 FUN&&
 Handle<T, WITH_RESOLVER>::PromiseType::await_transform(FUN&& fun) {
-   // If the await_transform is not a promise function, we just forward it as a normal
-   // awaitable.
+   // If the await_transform is not a promise function, we just forward it as a
+   // normal awaitable.
    return std::forward<FUN>(fun);
 }
 
@@ -226,7 +226,8 @@ Handle<T, WITH_RESOLVER>::WaitDone() {
 /**
  * @brief Wait for the promise to be awaited.
  *
- * @param current_count Optional current use count to wait from a specific point.
+ * @param current_count Optional current use count to wait from a specific
+ * point.
  */
 template <class T, bool WITH_RESOLVER>
 template <class SELF>
@@ -331,8 +332,8 @@ details::Promise<T, WITH_RESOLVER>&
 Handle<T, WITH_RESOLVER>::Detach(std::shared_ptr<details::Promise<T, WITH_RESOLVER>>&& self) && {
    assert(self);
    std::unique_lock lock{self->mutex_};
-   // assert(!self->self_owned_); @TODO implement a refcount to detach only when no more
-   // references to the promise details exist
+   // assert(!self->self_owned_); @TODO implement a refcount to detach only when
+   // no more references to the promise details exist
 
    if (!IsDone(lock)) {
       auto& result       = *self;

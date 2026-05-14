@@ -26,9 +26,9 @@ SOFTWARE.
 
 #include "../core/Promise.h"
 
-#include <utils/Scoped.h>
 #include <cassert>
 #include <exception>
+#include <utils/Scoped.h>
 
 namespace promise::details {
 
@@ -51,8 +51,8 @@ Promise<T, WITH_RESOLVER>::Promise(handle_type handle)
 /**
  * @brief Destructor for the Promise class.
  *
- * Ensures that the coroutine handle is properly cleaned up and that any unresolved promises are
- * detected in debug mode.
+ * Ensures that the coroutine handle is properly cleaned up and that any
+ * unresolved promises are detected in debug mode.
  */
 template <class T, bool WITH_RESOLVER>
 Promise<T, WITH_RESOLVER>::~Promise() {
@@ -372,7 +372,7 @@ Promise<T, WITH_RESOLVER>::Then(FUN&& func, ARGS&&... args) & {
                  );
               }
            }()
-             .Catch([reject = std::move(reject)](std::exception_ptr exception) constexpr {
+             .Catch([reject = std::move(reject)](std::exception_ptr exception) {
                 (*reject)(std::move(exception));
              })
              .Detach();
@@ -470,14 +470,8 @@ template <class FUN, class... ARGS>
 Promise<T, WITH_RESOLVER>::Catch(FUN&& func, ARGS&&... args) & {
    // Promise return type
    using promise_t = return_t<decltype(std::function{func})>;
-   using T2        = std::remove_pointer_t<decltype([]() constexpr {
-      if constexpr (IS_PROMISE_FUNCTION<FUN>) {
-         return static_cast<return_t<promise_t>*>(nullptr);
-      } else {
-         return static_cast<promise_t*>(nullptr);
-      }
-   }())>;
-   using FArgs     = args_t<decltype(std::function{func})>;
+   using T2 = std::conditional_t<IS_PROMISE_FUNCTION<FUN>, return_or_void_t<promise_t>, promise_t>;
+   using FArgs = args_t<decltype(std::function{func})>;
    static_assert(std::tuple_size_v<FArgs> == 1, "Catch promise must have exactly one argument!");
    using Exception = std::tuple_element_t<0, FArgs>;
 
@@ -575,9 +569,7 @@ Promise<T, WITH_RESOLVER>::Catch(FUN&& func, ARGS&&... args) & {
 
             if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                resolve_wrapper(apply_exception(exception), std::move(resolve))
-                 .Catch([reject](std::exception_ptr exception) constexpr {
-                    (*reject)(std::move(exception));
-                 })
+                 .Catch([reject](std::exception_ptr exception) { (*reject)(std::move(exception)); })
                  .Detach();
             } else {
                if constexpr (
@@ -616,8 +608,7 @@ Promise<T, WITH_RESOLVER>::Catch(FUN&& func, ARGS&&... args) & {
 
                     if constexpr (IS_PROMISE_FUNCTION<FUN>) {
                        resolve_wrapper(apply_exception(exception), std::move(resolve))
-                         .Catch([reject =
-                                   std::move(reject)](std::exception_ptr exception) constexpr {
+                         .Catch([reject = std::move(reject)](std::exception_ptr exception) {
                             (*reject)(std::move(exception));
                          })
                          .Detach();
@@ -704,9 +695,10 @@ Promise<T, WITH_RESOLVER>::Finally(FUN&& func) & {
          if constexpr (std::is_void_v<T>) {
             MakePromise(std::forward<FUN>(func))
               .Then([resolve = std::move(resolve)]() constexpr { (*resolve)(); })
-              .Catch([reject = std::forward<decltype(reject)>(reject)](
-                       std::exception_ptr exception
-                     ) constexpr { (*reject)(std::move(exception)); })
+              .Catch([reject =
+                        std::forward<decltype(reject)>(reject)](std::exception_ptr exception) {
+                 (*reject)(std::move(exception));
+              })
               .Detach();
          } else {
             MakePromise(std::forward<FUN>(func))
@@ -714,9 +706,10 @@ Promise<T, WITH_RESOLVER>::Finally(FUN&& func) & {
                      value   = std::tuple{std::forward<decltype(value)>(value)...}]() constexpr {
                  (*resolve)(std::get<0>(value));
               })
-              .Catch([reject = std::forward<decltype(reject)>(reject)](
-                       std::exception_ptr exception
-                     ) constexpr { (*reject)(std::move(exception)); })
+              .Catch([reject =
+                        std::forward<decltype(reject)>(reject)](std::exception_ptr exception) {
+                 (*reject)(std::move(exception));
+              })
               .Detach();
          }
       } else {
@@ -734,16 +727,16 @@ Promise<T, WITH_RESOLVER>::Finally(FUN&& func) & {
       }
    };
 
-   auto apply_exception = [](auto&& reject, auto&& func, std::exception_ptr exception) constexpr {
+   auto apply_exception = [](auto&& reject, auto&& func, std::exception_ptr exception) {
       if constexpr (IS_PROMISE_FUNCTION<FUN>) {
          MakePromise(std::forward<FUN>(func))
            .Then([reject    = std::forward<decltype(reject)>(reject),
                   exception = std::move(exception)]() constexpr {
               (*reject)(std::move(exception));
            })
-           .Catch([reject = std::forward<decltype(reject)>(reject)](
-                    std::exception_ptr exception
-                  ) constexpr { (*reject)(std::move(exception)); })
+           .Catch([reject = std::forward<decltype(reject)>(reject)](std::exception_ptr exception) {
+              (*reject)(std::move(exception));
+           })
            .Detach();
       } else {
          try {
@@ -804,7 +797,8 @@ Promise<T, WITH_RESOLVER>::Finally(FUN&& func) & {
            } catch (...) {
               assert(
                 false
-                && "This shall not throw since we're already handling exceptions, but just in "
+                && "This shall not throw since we're already handling "
+                   "exceptions, but just in "
                    "case..."
               );
 
@@ -866,8 +860,8 @@ Promise<T, WITH_RESOLVER>::Race(
          ++use_count_;
          this->cv_.notify_all();
       }
-      // If the race promise is already done, we can skip registering a continuation and just
-      // return it directly
+      // If the race promise is already done, we can skip registering a
+      // continuation and just return it directly
       return std::move(race_promise);
    }
 
@@ -1027,8 +1021,8 @@ Promise<T, WITH_RESOLVER>::Reject(ARGS&&... args) {
 /**
  * @brief Create a promise from a callable and optional resolver.
  **
- * @tparam RPROMISE Boolean flag indicating whether to return a tuple with resolver and
- *rejector.
+ * @tparam RPROMISE Boolean flag indicating whether to return a tuple with
+ *resolver and rejector.
  * @tparam FUN Type of the callable.
  * @tparam ARGS Types of arguments to forward to the callable.
  **
@@ -1052,7 +1046,8 @@ constexpr std::conditional_t<
 Promise<T, WITH_RESOLVER>::Create(FUN&& func, ARGS&&... args) {
    static_assert(
      IS_PROMISE_FUNCTION<FUN>,
-     "Create only supports callables that return promises, not promise wrappers!"
+     "Create only supports callables that return promises, not "
+     "promise wrappers!"
    );
    struct FunctionImpl : Function {
       /**

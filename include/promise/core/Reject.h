@@ -24,6 +24,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <atomic>
 #include <cassert>
 #include <exception>
 #include <functional>
@@ -58,7 +59,8 @@ public:
     *
     * @param exception Exception to store.
     *
-    * @return True if this call rejected the promise, false if it was already rejected.
+    * @return True if this call rejected the promise, false if it was already
+    * rejected.
     */
    bool operator()(std::exception_ptr exception) const;
 
@@ -69,20 +71,23 @@ public:
     *
     * @param exception Exception to store.
     *
-    * @return True if this call rejected the promise, false if it was already rejected.
+    * @return True if this call rejected the promise, false if it was already
+    * rejected.
     */
    template <class EXCEPTION>
    bool operator()(EXCEPTION&& exception) const;
 
    /**
-    * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
+    * @brief Reject the promise with an exception of type EXCEPTION constructed
+    * with ARGS.
     *
     * @tparam EXCEPTION Exception type to construct.
     * @tparam ARGS Constructor arguments for the exception.
     *
     * @param args Arguments forwarded to the exception constructor.
     *
-    * @return True if this call rejected the promise, false if it was already rejected.
+    * @return True if this call rejected the promise, false if it was already
+    * rejected.
     */
    template <class EXCEPTION, class... ARGS>
    bool Apply(ARGS&&... args) const;

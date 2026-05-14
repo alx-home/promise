@@ -26,11 +26,11 @@ SOFTWARE.
 
 #include "core.h"
 
-#include <utils/Scoped.h>
 #include <cassert>
 #include <exception>
 #include <memory>
 #include <type_traits>
+#include <utils/Scoped.h>
 #include <variant>
 
 namespace promise {
@@ -59,7 +59,8 @@ struct ResolverValue {
 /**
  * @brief Specialization of ResolverValue for void types.
  *
- * For void types, we simply track whether a value has been set using a boolean flag.
+ * For void types, we simply track whether a value has been set using a boolean
+ * flag.
  */
 template <>
 struct ResolverValue<void> {
@@ -106,7 +107,8 @@ public:
    /**
     * @brief Resolve the promise with a value.
     * @param value Value to resolve with.
-    * @return True if this call resolved the promise, false if it was already resolved.
+    * @return True if this call resolved the promise, false if it was already
+    * resolved.
     */
    template <class TT>
       requires(!std::is_void_v<T> && std::is_convertible_v<TT, T>)
@@ -114,7 +116,8 @@ public:
 
    /**
     * @brief Resolve the promise with a value.
-    * @return True if this call resolved the promise, false if it was already resolved.
+    * @return True if this call resolved the promise, false if it was already
+    * resolved.
     */
    template <class...>
       requires(std::is_void_v<T>)
@@ -124,7 +127,8 @@ public:
     * @brief Reject the promise with an exception and a shared resolved flag.
     * @param exception Exception to store.
     * @param resolved Shared resolved flag.
-    * @return True if this call rejected the promise, false if it was already rejected.
+    * @return True if this call rejected the promise, false if it was already
+    * rejected.
     */
    template <class EXCEPTION, class... ARGS>
    bool Reject(ARGS&&... args);
@@ -132,7 +136,8 @@ public:
    /**
     * @brief Reject the promise with an exception and a shared resolved flag.
     * @param exception Exception to store.
-    * @return True if this call rejected the promise, false if it was already rejected.
+    * @return True if this call rejected the promise, false if it was already
+    * rejected.
     */
    bool Reject(std::exception_ptr exception);
 

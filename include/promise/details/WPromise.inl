@@ -25,22 +25,24 @@ SOFTWARE.
 #pragma once
 
 #include "../core/WPromise.h"
-#include "core/WPromise.h"
 
 namespace promise::details {
 
 /**
  * @brief Promise handle that owns shared state and supports co_await.
  *
- * This class is the public-facing handle over the shared promise details. It provides
- * awaitable behavior and exposes state inspection and chaining helpers (Then/Catch/Finally)
- * without revealing whether the underlying promise is resolver-less or resolver-based.
+ * This class is the public-facing handle over the shared promise details. It
+ * provides awaitable behavior and exposes state inspection and chaining helpers
+ * (Then/Catch/Finally) without revealing whether the underlying promise is
+ * resolver-less or resolver-based.
  *
  * @tparam T Value type (or void).
  * @tparam WITH_RESOLVER Whether the promise uses an external resolver.
  *
- * @note Resolver is attached on first start (MakePromise or coroutine initial_suspend).
- * @note State queries (Done/Value/Exception) assume the promise has been started.
+ * @note Resolver is attached on first start (MakePromise or coroutine
+ * initial_suspend).
+ * @note State queries (Done/Value/Exception) assume the promise has been
+ * started.
  */
 template <class T>
 
@@ -314,7 +316,8 @@ WPromise<T>::UseCount() const noexcept {
 /**
  * @brief Wait for the promise to be awaited.
  *
- * @param current_count Optional current use count to wait from a specific point.
+ * @param current_count Optional current use count to wait from a specific
+ * point.
  */
 template <class T>
 void
@@ -499,7 +502,8 @@ WPromise<T>::Resolve(ARGS&&... args) {
 /**
  * @brief Create a rejected promise without starting a coroutine.
  *
- * @tparam ARGS Types of arguments to forward to the rejection value constructor.
+ * @tparam ARGS Types of arguments to forward to the rejection value
+ * constructor.
  *
  * @param args Constructor args for the rejection value (if any).
  *
@@ -515,7 +519,8 @@ WPromise<T>::Reject(ARGS&&... args) {
 /**
  * @brief Create a rejected promise without starting a coroutine.
  *
- * @tparam ARGS Types of arguments to forward to the rejection value constructor.
+ * @tparam ARGS Types of arguments to forward to the rejection value
+ * constructor.
  *
  * @param args Constructor args for the rejection value (if any).
  *

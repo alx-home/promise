@@ -22,15 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
-
 #include "core/Memcheck.h"
 
-#include <utils/Scoped.h>
+#include <atomic>
 #include <cassert>
 #include <iostream>
 #include <mutex>
 #include <unordered_set>
+#include <utils/Scoped.h>
 
 namespace promise {
 
@@ -51,7 +50,8 @@ Refcount::Refcount(VPromise* ptr) {
 }
 
 /**
- * @brief Destructor that decrements the counter and removes the pointer from tracking.
+ * @brief Destructor that decrements the counter and removes the pointer from
+ * tracking.
  */
 Refcount::~Refcount() {
    --counter;
@@ -81,11 +81,12 @@ Check::~Check() {
 
 /**
  * @brief Helper for memory leak detection in debug mode.
- * When enabled, this function returns a scope guard that checks for active promises on destruction.
- * If any active promises are detected, it reports the number of leaks and their addresses.
+ * When enabled, this function returns a scope guard that checks for active
+ * promises on destruction. If any active promises are detected, it reports the
+ * number of leaks and their addresses.
  *
- * @note This should be used at the beginning of the main function to ensure it runs for the entire
- * program duration.
+ * @note This should be used at the beginning of the main function to ensure it
+ * runs for the entire program duration.
  *
  * @return Scope guard that checks for memory leaks on destruction.
  */
