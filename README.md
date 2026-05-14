@@ -168,16 +168,16 @@ auto [created, resolve, reject] = promise::Create<int>();
 resolve->operator()(7);
 
 auto all = promise::All(
-	[]() -> Promise<int> { co_return 1; },
-	[]() -> Promise<void> { co_return; },
-	[]() -> Promise<int> { co_return 2; }
+	[] { return 1; },
+	[] -> Promise<void> { co_return; },
+	[] -> Promise<int> { co_return 2; }
 );
 
 auto [a, b] = co_await all; // void result is awaited but not present in tuple
 
 auto raced = promise::Race(
-	[]() -> Promise<int> { co_return 1; },
-	[]() -> Promise<double> { co_return 2.5; }
+	[] -> Promise<int> { co_return 1; },
+	[] -> double { return 2.5; }
 );
 
 

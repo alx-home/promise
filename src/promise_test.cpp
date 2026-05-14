@@ -228,7 +228,7 @@ main() {
             };
 
             auto all = promise::All(
-              [] -> Promise<int> { co_return 1; },
+              [] { return 1; },
               [] -> Promise<void> { co_return; },
               [] -> Promise<int> { co_return 2; }
             );
@@ -236,9 +236,8 @@ main() {
             std::cout << "All " << std::get<0>(co_await all) << " " << std::get<1>(co_await all)
                       << std::endl;
 
-            auto raced = promise::Race(
-              []() -> Promise<int> { co_return 1; }, []() -> Promise<double> { co_return 2.5; }
-            );
+            auto raced =
+              promise::Race([] -> Promise<int> { co_return 1; }, [] -> double { return 2.5; });
 
             std::visit(
               [](auto const& value) { std::cout << "Race " << value << std::endl; }, co_await raced
