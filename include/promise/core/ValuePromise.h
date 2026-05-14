@@ -57,20 +57,19 @@ using UniqueLock = std::variant<
   std::reference_wrapper<std::unique_lock<std::shared_mutex>>,
   std::reference_wrapper<std::lock_guard<std::shared_mutex>>>;
 
-template <class T>
 /**
  * @brief Base class for promises that can hold a resolved value.
  *
  * This class provides common functionality for promises that may or may not have a resolved value.
- * The IS_VOID template parameter indicates whether the promise is of void type, which affects how
+ * The static IS_VOID member indicates whether the promise is of void type, which affects how
  * resolution is handled.
  *
- * @tparam T Type of the resolved value (ignored if VOID_TYPE is true).
- * @tparam VOID_TYPE Boolean flag indicating whether this is a void promise.
+ * @tparam T Type of the resolved value. Use void for promises without a resolved value.
  *
  * @note This class is intended to be used as a base for promise implementations and should not be
  * used directly.
  */
+template <class T>
 class ValuePromise : public VPromise {
 protected:
    /** @brief Boolean constant indicating whether this promise has void type. */
