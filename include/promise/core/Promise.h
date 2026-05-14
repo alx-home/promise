@@ -92,6 +92,7 @@ protected:
    /** @brief Unlock helper for lock guards. */
    using Unlock = typename Handle<T, WITH_RESOLVER>::Unlock;
 
+   /** @brief Boolean constant indicating whether this is a void promise. */
    static constexpr bool IS_VOID = std::is_void_v<T>;
 
 private:

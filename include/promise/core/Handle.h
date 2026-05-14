@@ -204,6 +204,7 @@ protected:
          requires(!IS_PROMISE_FUNCTION<FUN>)
       FUN&& await_transform(FUN&& fun);
 
+      /** @brief Grants the Promise type access to PromiseType's private members. */
       friend Promise;
       /** @brief Grants the enclosing Handle<T, WITH_RESOLVER> access to PromiseType's private
        * members. */

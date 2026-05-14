@@ -52,6 +52,7 @@ class ValuePromise;
 template <class T>
 struct ResolverValue {
    // unique_ptr to handle std::optional<std::optional>...
+   /** @brief Storage for the resolved value. */
    std::unique_ptr<T> value_{};
 };
 
@@ -62,6 +63,7 @@ struct ResolverValue {
  */
 template <>
 struct ResolverValue<void> {
+   /** @brief Flag indicating whether the void promise has been resolved. */
    bool value_is_set_{false};
 };
 

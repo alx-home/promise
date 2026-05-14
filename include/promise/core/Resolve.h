@@ -39,10 +39,10 @@ class Resolver;
 template <class T = void>
 class Resolve;
 
-template <>
 /**
  * @brief Resolver for Promise<void>.
  */
+template <>
 class Resolve<void> : public std::enable_shared_from_this<Resolve<void>> {
 private:
    /**
@@ -80,11 +80,11 @@ private:
    std::shared_ptr<Resolver<void>> resolver_;
 };
 
-template <class T>
-   requires(!std::is_void_v<T>)
 /**
  * @brief Resolver for Promise<T>.
  */
+template <class T>
+   requires(!std::is_void_v<T>)
 class Resolve<T> : public std::enable_shared_from_this<Resolve<T>> {
 private:
    /**
