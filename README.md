@@ -25,7 +25,7 @@ Chain with <code>Then</code>, recover with <code>Catch</code>, clean up with <co
 
 ## Why this library exists
 
-c++23 coroutines are powerful, but the ecosystem around them is still low‑level and hard to use.  
+c++20 coroutines are powerful, but the ecosystem around them is still low‑level and hard to use.  
 JavaScript, on the other hand, nailed the ergonomics of async programming years ago.
 
 This library brings that experience to C++:
