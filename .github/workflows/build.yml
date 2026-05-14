@@ -55,6 +55,7 @@ jobs:
               mkdir -p coverage
               gcovr \
                 --root . \
+                --filter './(src|include)/' \
                 --object-directory build \
                 --exclude-directories CMakeFiles \
                 --gcov-ignore-errors=all \
