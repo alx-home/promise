@@ -169,12 +169,13 @@ auto [created, resolve, reject] = promise::Create<int>();
 
 auto all = promise::All(
 	created,
-	[] { return 1; },
+	[] -> double { return 1.0; },
 	[] -> Promise<void> { co_return; },
 	[] -> Promise<int> { co_return 2; }
 );
 
-auto [a, b] = co_await all; // void result is awaited but not present in tuple
+auto [a, b, c] = co_await all; // std::tuple<int, double, int>, void result is awaited but not present in tuple
+
 
 auto raced = promise::Race(
 	created,
@@ -182,16 +183,52 @@ auto raced = promise::Race(
 	[] -> double { return 2.5; }
 );
 
+auto raced_result = co_await raced; // std::variant<int, double>
 
-WPromise prom{[](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
-	MakeReject<std::runtime_error>(reject, "failed");
-	co_return;
+// -----------------------------------------------------------------------------
+// 1. Promise without a resolver
+//    - The lambda returns a Promise<int>
+//    - No Resolve/Reject handles are provided
+//    - The coroutine simply co_returns a value
+// -----------------------------------------------------------------------------
+WPromise prom{[]() -> Promise<int> {	
+	co_return 1;
 }};
 
-auto prom = MakePromise([](Resolve<int> const& resolve) -> Promise<int, true> {
+// -----------------------------------------------------------------------------
+// 2. Resolver-style promise with explicit Resolve + Reject
+//    - The lambda receives both Resolve<int> and Reject
+//    - You manually resolve/reject the promise using the Resolve/Reject handles
+//    - Promise<int, true>, true means “resolver-enabled promise”
+// -----------------------------------------------------------------------------
+WPromise prom{[](Resolve<int> const&, Reject const& reject) -> Promise<int, true> {
+	MakeReject<std::runtime_error>(reject, "failed");
+	co_return; // Always return void
+}};
+
+// -----------------------------------------------------------------------------
+// 3. Resolver-style promise with only Resolve<T>
+//    - Only the Resolve<int> handle is provided
+//    - Useful when failure is not expected or handled elsewhere
+//    - You manually resolve the promise with a value
+// -----------------------------------------------------------------------------
+WPromise prom{[](Resolve<int> const& resolve) -> Promise<int, true> {
 	resolve(123);
-	co_return;
-});
+	co_return; // Always return void
+}};
+
+// -----------------------------------------------------------------------------
+// 4. Resolver‑style promise with only Reject
+//    - The lambda receives only the Reject handle
+//    - Useful when the promise can only fail (no success path)
+//    - You manually reject the promise with an error
+// -----------------------------------------------------------------------------
+WPromise prom{
+    [](Reject const& reject) -> Promise<int, true> {
+        MakeReject<std::runtime_error>(reject, "failed");
+        co_return; // Always return void
+    }
+};
 
 auto [prom2, resolve2, reject2] = MakeRPromise(
 	[](Resolve<int> const&, Reject const&) -> Promise<int, true> { co_return; }
