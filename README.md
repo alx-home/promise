@@ -49,6 +49,8 @@ If you know JavaScript promises, you already know how to use this library — bu
 | Threaded dispatch | `promise::Pool`, `promise::MessageQueue` |
 | Introspection | `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()` |
 
+<img width="1100" height="420" alt="image" src="https://github.com/user-attachments/assets/da147329-20f6-4b99-8bb3-074debda3276" />
+
 ## Contents
 
 - [Thread safety](#thread-safety)
