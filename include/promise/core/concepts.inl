@@ -43,12 +43,12 @@ class WPromise;
 
 }  // namespace details
 
-template <class>
 /**
  * @brief Helper template to detect std::function types.
  *
  * Primary template is std::false_type.
  */
+template <class>
 struct IsFunction : std::false_type {};
 
 /**
@@ -155,12 +155,12 @@ struct ReturnOrVoid<T> {
 template <class T>
 using return_or_void_t = typename ReturnOrVoid<T>::type;
 
-template <class T>
 /**
  * @brief Helper template to detect resolver types.
  *
  * Primary template is std::false_type.
  */
+template <class T>
 struct IsResolver : std::false_type {};
 
 template <class T>
@@ -192,12 +192,12 @@ static constexpr bool IS_RESOLVER = IsResolver<std::remove_cvref_t<T>>::value;
 template <class T>
 static constexpr bool IS_REJECTOR = std::is_same_v<std::remove_cvref_t<T>, promise::Reject>;
 
-template <class FUN>
 /**
  * @brief Helper template to detect resolver-style promises.
  *
  * Primary template is std::false_type.
  */
+template <class FUN>
 struct WithResolver : std::false_type {};
 
 /**

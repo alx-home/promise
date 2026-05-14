@@ -56,7 +56,7 @@ public:
    bool operator()(std::exception_ptr exception) const;
 
    /**
-    * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
+    * @brief Reject the promise with an exception of type EXCEPTION.
     *
     * @tparam EXCEPTION Exception type to construct.
     *
