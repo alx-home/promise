@@ -1,29 +1,59 @@
-[![Build](https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg)](https://github.com/alx-home/promise/actions/workflows/build.yml)
-[![Quality Gate Status](https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09)](https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce)
+<p align="center">
+	<a href="https://github.com/alx-home/promise/actions/workflows/build.yml">
+		<img alt="Build" src="https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg">
+	</a>
+	<a href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+		<img alt="Quality Gate Status" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+	</a>
+</p>
 
-# alx-home promise
+<h1 align="center">alx-home promise</h1>
 
-Coroutine-native Promise implementation for C++20 with a JavaScript-like feel. Chain `Then`,
-recover with `Catch`, and clean up with `Finally`, all with minimal boilerplate and clear flow.
-Lambdas passed into promises are stored by the promise itself, so lambda captures live until
-completion. This avoids a common C++ coroutine pitfall where values captured in `[]` can be
-destroyed before the coroutine finishes. Use resolver-style promises when you need explicit
-control, while keeping the ergonomics of JS Promises in modern C++.
+<p align="center">
+Coroutine-native Promises for C++20 with JavaScript-like ergonomics and C++ correctness.
+</p>
 
-## Features
+> Chain with `Then`, recover with `Catch`, clean up with `Finally`, and keep lambda captures alive until completion.
 
-- C++20 coroutine promise type with `co_await` support.
-- Chaining: `Then`, `Catch`, `Finally`.
-- Resolver promises: `Promise<T, true>` plus `Resolve<T>` and `Reject`.
-- Helpers: `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()`.
-- Works with both coroutine and non-coroutine callables passed to `MakePromise`.
-- `CVPromise` helper for condition-variable-style async notification.
-- `StatePromise` helper for ready/done state signaling across coroutines, including `IsDone()`.
-- `promise::Pool<SIZE>` and `promise::MessageQueue` for dispatching work onto worker threads.
-- State inspection via `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()`, `Awaiters()`, and `UseCount()`.
-- Optional leak detection via `PROMISE_MEMCHECK`.
-- Public handle types: `Promise<T>` (coroutine return), `WPromise<T>` (owning handle), and `VPromise` for type-erased pointers.
-- Lambdas are stored in the promise, so captures survive until resolution.
+## Contents
+
+- [At a glance](#at-a-glance)
+- [Thread safety](#thread-safety)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Promise handle types](#promise-handle-types)
+- [`MakePromise` scope and coroutine lambda rule](#makepromise-scope-and-coroutine-lambda-rule)
+- [Basic usage](#basic-usage)
+- [Quick card](#quick-card)
+- [Forwarding arguments into `MakePromise`](#forwarding-arguments-into-makepromise)
+- [Lambda capture lifetime](#lambda-capture-lifetime)
+- [Resolver-style promises](#resolver-style-promises)
+- [`Promise::Resolve` and `Promise::Reject`](#promiseresolve-and-promisereject)
+- [Using resolvers outside the coroutine scope](#using-resolvers-outside-the-coroutine-scope)
+- [`promise::All` and `promise::Race`](#promiseall-and-promiserace)
+- [`CVPromise` for async notification](#cvpromise-for-async-notification)
+- [`StatePromise` for ready/done workflows](#statepromise-for-readydone-workflows)
+- [`promise::Pool` and `promise::MessageQueue`](#promisepool-and-promisemessagequeue)
+- [Finally usage](#finally-usage)
+- [Using non-promise lambdas in Then/Catch/Finally](#using-non-promise-lambdas-in-thencatchfinally)
+- [Type flow after Then/Catch](#type-flow-after-thencatch)
+- [Done, Resolved, Rejected, Value, Exception, Awaiters, UseCount](#done-resolved-rejected-value-exception-awaiters-usecount)
+- [`[[nodiscard]]` and detached chains](#nodiscard-and-detached-chains)
+- [Detach](#detach)
+- [Build](#build)
+- [Memory checking](#memory-checking)
+
+## At a glance
+
+| Capability | What you get |
+| --- | --- |
+| Native coroutine support | `Promise<T>` return types and seamless `co_await` integration |
+| JS-style chaining | `Then`, `Catch`, and `Finally` for expressive async flows |
+| Resolver model | `Promise<T, true>`, `Resolve<T>`, and `Reject` for explicit completion |
+| Combinators | `promise::All(...)`, `promise::Race(...)`, and `promise::Create<T>()` |
+| Threaded dispatch | `promise::Pool<SIZE>` and `promise::MessageQueue` |
+| Async coordination | `CVPromise` and `StatePromise` for signaling and ready/done workflows |
+| Introspection | `Done()`, `Resolved()`, `Rejected()`, `Value()`, `Exception()`, `Awaiters()`, `UseCount()` |
 
 ## Thread safety
 
@@ -40,6 +70,26 @@ a `thread_local` object that has already been destroyed when a thread exits.
 - C++20 compiler.
 - CMake 3.20+.
 - Dependency: `alx-home::cpp_utils` (linked by CMake).
+
+## Quick start
+
+Build from this folder:
+
+```powershell
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target alx-home_promise promise_test
+./build/promise_test.exe
+```
+
+Minimal async chain:
+
+```cpp
+#include <promise/promise.h>
+
+WPromise demo{[]() -> Promise<int> { co_return 21; }};
+
+int const answer = co_await demo.Then([](int v) { return v * 2; });
+```
 
 ## Promise handle types
 
@@ -104,21 +154,25 @@ WPromise FetchCachedOrAsync(bool use_cache) {
 WPromise Demo {[]() -> Promise<void> {
 	auto result = co_await GetAnswer();
 
-   auto chained = WPromise{[=]() -> Promise<int> {
-                     co_return result + 1;
-                  }}
-                  .Then([](int value)  { return value * 2; })
-                  .Then([](int value) -> Promise<int> { co_return value / 2; })
-                  .Then([](int value) -> WPromise<int> {
-                     return FetchCachedOrAsync(value > 0);
-                  })
-                  .Catch([](std::exception_ptr) -> WPromise<void> {
-                     return Promise<void>::Resolve();
-                  })
-                  .Then([](std::optional<int> const& value) -> Promise<int> {
-                     // value is std::optional<int> because Catch returned void
-                     co_return value.value_or(-1);
-                  });
+	auto chained = WPromise{[=]() -> Promise<int> {
+		co_return result + 1;
+	}}
+		.Then([](int value) { return value * 2; })
+		.Then([](int value) -> Promise<int> { co_return value / 2; })
+		.Then([](int value) -> WPromise<int> {
+			return FetchCachedOrAsync(value > 0);
+		})
+		.Catch([](std::exception_ptr) -> WPromise<void> {
+			return Promise<void>::Resolve();
+		})
+		.Then([](std::optional<int> const& value) -> Promise<int> {
+			// value is std::optional<int> because Catch returned void
+			co_return value.value_or(-1);
+		});
+
+	[[maybe_unused]] auto value = co_await chained;
+	(void)value;
+	co_return;
 }};
 ```
 
