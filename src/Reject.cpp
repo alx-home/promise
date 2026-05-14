@@ -27,9 +27,9 @@ SOFTWARE.
 namespace promise {
 
 std::shared_ptr<Reject>
-Reject::Create(std::function<void(std::exception_ptr)> impl) {
+Reject::Create(std::function<bool(std::exception_ptr)> impl) {
    struct MakeSharedEnabler : public Reject {
-      MakeSharedEnabler(std::function<void(std::exception_ptr)> impl)
+      MakeSharedEnabler(std::function<bool(std::exception_ptr)> impl)
          : Reject(std::move(impl)) {}
    };
    return std::make_shared<MakeSharedEnabler>(std::move(impl));

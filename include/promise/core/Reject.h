@@ -42,7 +42,7 @@ private:
     *
     * @param impl Callback invoked on reject.
     */
-   Reject(std::function<void(std::exception_ptr)> impl);
+   Reject(std::function<bool(std::exception_ptr)> impl);
 
 public:
    /**
@@ -52,7 +52,7 @@ public:
     *
     * @return Shared reject handle.
     */
-   static std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl);
+   static std::shared_ptr<Reject> Create(std::function<bool(std::exception_ptr)> impl);
 
    /**
     * @brief Reject the promise with an exception.
@@ -100,7 +100,7 @@ public:
    operator bool() const;
 
 private:
-   std::function<void(std::exception_ptr)> impl_;
+   std::function<bool(std::exception_ptr)> impl_;
    mutable std::atomic<bool>               rejected_{false};
 };
 

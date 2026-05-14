@@ -38,7 +38,7 @@ std::mutex                          Refcount::mutex{};
  *
  * @param impl Function invoked with the rejection exception.
  */
-Reject::Reject(std::function<void(std::exception_ptr)> impl)
+Reject::Reject(std::function<bool(std::exception_ptr)> impl)
    : impl_(std::move(impl)) {}
 
 /** @brief Rejects once with the provided exception.
@@ -49,8 +49,7 @@ Reject::Reject(std::function<void(std::exception_ptr)> impl)
 bool
 Reject::operator()(std::exception_ptr exception) const {
    if (!rejected_.exchange(true)) {
-      impl_(std::move(exception));
-      return true;
+      return impl_(std::move(exception));
    }
 
    return false;
