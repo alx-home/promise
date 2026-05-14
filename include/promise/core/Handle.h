@@ -205,7 +205,7 @@ protected:
       FUN&& await_transform(FUN&& fun);
 
       friend Promise;
-      /** @brief Own reference to the parent promise for recursive access. */
+      /** @brief Grants the enclosing Handle<T, WITH_RESOLVER> access to PromiseType's private members. */
       friend Handle;
 
    private:
