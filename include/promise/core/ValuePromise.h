@@ -73,6 +73,7 @@ template <class T>
  */
 class ValuePromise : public VPromise {
 protected:
+   /** @brief Boolean constant indicating whether this promise has void type. */
    static constexpr bool IS_VOID = std::is_void_v<T>;
 
 public:

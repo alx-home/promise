@@ -60,14 +60,19 @@ template <class T, bool WITH_RESOLVER>
 class Handle : public ValuePromise<T> {
 protected:
    struct PromiseType;
+   /** @brief Coroutine handle type for this promise. */
    using handle_type  = std::coroutine_handle<PromiseType>;
+   /** @brief Promise implementation type (resolver-based or resolver-less). */
    using Promise      = details::IPromise<T, WITH_RESOLVER>;
+   /** @brief Value promise base class type. */
    using ValuePromise = ValuePromise<T>;
+   /** @brief Lock guard type for shared mutex synchronization. */
    using Locker       = std::unique_lock<std::shared_mutex>;
    /**
     * @brief Unlock helper for lock guards.
     */
    struct Unlock {
+      /** @brief Reference to the lock being managed. */
       Locker& lock_;
 
       /**
@@ -119,6 +124,7 @@ protected:
    };
 
    struct PromiseType : std::conditional_t<IS_VOID, VoidPromiseType, ValuePromiseType> {
+      /** @brief Parent promise implementation type. */
       using Parent = details::Promise<T, WITH_RESOLVER>;
 
    private:
@@ -149,6 +155,7 @@ protected:
       Parent* GetParent() const;
 
       struct InitSuspend {
+         /** @brief Parent promise reference. */
          Parent& self_;
 
          /** @brief Check whether initial suspension can be skipped. */
@@ -167,6 +174,7 @@ protected:
           */
          constexpr void await_resume() const noexcept(false);
       };
+      /** @brief Final suspension point (never suspends, coroutine is destroyed). */
       using FinalSuspend = std::suspend_never;
 
       /**
@@ -197,9 +205,11 @@ protected:
       FUN&& await_transform(FUN&& fun);
 
       friend Promise;
+      /** @brief Grants the enclosing Handle<T, WITH_RESOLVER> access to PromiseType's private members. */
       friend Handle;
 
    private:
+      /** @brief Storage for delayed return values pending coroutine finalization. */
       using ReturnValue = std::conditional_t<
         IS_VOID,
         std::exception_ptr,
@@ -324,15 +334,28 @@ public:
    [[nodiscard]] bool Done(Lock lock) const;
 
 protected:
+   /** @brief Shared mutex protecting promise state. */
    mutable std::shared_mutex           mutex_{};
+   /** @brief Condition variable for notifying state changes. */
    mutable std::condition_variable_any cv_{};
 
+   /** @brief Coroutine handle for the promise execution context. */
    handle_type                                         handle_{nullptr};
+   /** @brief Shared ownership of the promise implementation. */
    std::shared_ptr<details::Promise<T, WITH_RESOLVER>> self_owned_{nullptr};
+   /**
+    * @brief Shared resolver/state storage used by the promise in both modes.
+    *
+    * This member backs internal resolution/state handling regardless of
+    * WITH_RESOLVER. It is only externally exposed as a resolver when
+    * WITH_RESOLVER is true.
+    */
    std::shared_ptr<Resolver<T>>                        resolver_{nullptr};
 
 public:
+   /** @brief Promise implementation interface. */
    friend class details::IPromise<T, WITH_RESOLVER>;
+   /** @brief Base value promise class. */
    friend ValuePromise;
    friend class Resolver<T>;
 };
