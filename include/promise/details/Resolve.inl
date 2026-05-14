@@ -32,7 +32,7 @@ namespace promise {
 
 /**
  * @brief Construct a value resolver from an implementation callback.
- * @param impl Callback invoked on resolve.
+ * @param resolver Shared resolver state.
  */
 template <class T>
    requires(!std::is_void_v<T>)

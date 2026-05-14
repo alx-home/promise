@@ -135,14 +135,30 @@ All(PROMISE&&... promise) {
    }(std::forward<PROMISE>(promise))...);
 }
 
+/**
+ * @brief Helper template to create a variant with unique types.
+ *
+ * Primary template for accumulating unique types.
+ */
 template <class V, class... TS>
 struct UniqueVariantHelper;
 
+/**
+ * @brief Specialization for non-empty type list.
+ *
+ * Adds types to variant only if they don't already exist (excluding void).
+ */
 template <class V, class T, class... TS>
 struct UniqueVariantHelper<V, T, TS...> {
+   /**
+    * @brief Inner helper to add missing types.
+    */
    template <typename T2, typename V2>
    struct add_if_missing;
 
+   /**
+    * @brief Specialization that adds T2 only if not already in variant.
+    */
    template <typename T2, typename... US>
    struct add_if_missing<T2, std::variant<US...>> {
       using type = std::conditional_t<
@@ -154,6 +170,11 @@ struct UniqueVariantHelper<V, T, TS...> {
    using type = typename UniqueVariantHelper<typename add_if_missing<T, V>::type, TS...>::type;
 };
 
+/**
+ * @brief Specialization for empty type list.
+ *
+ * Base case when all types have been processed.
+ */
 template <typename V>
 struct UniqueVariantHelper<V> {
    using type = V;

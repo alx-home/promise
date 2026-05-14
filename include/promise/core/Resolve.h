@@ -48,7 +48,7 @@ private:
    /**
     * @brief Construct a void resolver from an implementation callback.
     *
-    * @param impl Callback invoked on resolve.
+    * @param resolver Shared resolver state.
     */
    Resolve(std::shared_ptr<Resolver<void>> resolver);
 
@@ -83,7 +83,7 @@ private:
    /**
     * @brief Construct a value resolver from an implementation callback.
     *
-    * @param impl Callback invoked on resolve.
+    * @param resolver Shared resolver state.
     */
    Resolve(std::shared_ptr<Resolver<T>> resolver);
 

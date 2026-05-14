@@ -29,6 +29,14 @@ SOFTWARE.
 #include <utils/MessageQueueProxy.inl>
 
 namespace utils::queue {
+/**
+ * @brief Dispatch a callback to be executed on the queue and return a promise for its result.
+ *
+ * @tparam T Return type of the callback.
+ * @param callback Callable invoked with the object; its return value resolves the promise.
+ * @return Promise that resolves with the callback's return value, or rejects if the queue is
+ * stopped.
+ */
 template <class OBJECT, class OBJECT_PUBLIC>
 template <class T>
    requires(!std::is_void_v<T>)
@@ -38,15 +46,17 @@ Proxy<OBJECT, OBJECT_PUBLIC>::operator()(std::function<T(OBJECT_PUBLIC&)>&& call
      [this, callback = std::move(callback)](
        Resolve<T> const& resolve, Reject const& reject
      ) mutable -> Promise<T, true> {
-        if (details_.MessageQueue::Ensure(
-              [this, callback = std::move(callback), &resolve, &reject] constexpr mutable {
-                 try {
-                    resolve(callback(details_));
-                 } catch (...) {
-                    reject(std::current_exception());
-                 }
-              }
-            )) {
+        if (
+          details_.MessageQueue::Ensure(
+            [this, callback = std::move(callback), &resolve, &reject] constexpr mutable {
+               try {
+                  resolve(callback(details_));
+               } catch (...) {
+                  reject(std::current_exception());
+               }
+            }
+          )
+        ) {
 
         } else {
            MakeReject<std::runtime_error>(reject, "Queue is not running");
