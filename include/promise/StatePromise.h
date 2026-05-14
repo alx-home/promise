@@ -28,7 +28,7 @@ SOFTWARE.
 
 /** @brief A promise that represents the state of an operation, allowing waiting for readiness or
  * completion. */
-struct StatePromise {
+class StatePromise {
 public:
    StatePromise() = default;
 
