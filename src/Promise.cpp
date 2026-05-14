@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "details/Promise.inl"
+#include "details/Resolver.inl"
 
 namespace promise {
 
