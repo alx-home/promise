@@ -24,12 +24,21 @@ SOFTWARE.
 
 #pragma once
 
-#include "core.h"
+#include "core/WPromise.h"
+#include "core/helpers.h"
 
-#include "details/helpers.inl"
-#include "details/Resolver.inl"
-#include "details/Resolve.inl"
-#include "details/Reject.inl"
-#include "details/WPromise.inl"
-#include "details/Handle.inl"
-#include "details/Promise.inl"
+template <class T = void, bool WITH_RESOLVER = false>
+using Promise = promise::details::IPromise<T, WITH_RESOLVER>;
+
+template <class T = void>
+using WPromise = promise::details::WPromise<T>;
+
+/**
+ * @brief Public resolve handle alias.
+ */
+template <class T = void>
+using Resolve = promise::Resolve<T>;
+/**
+ * @brief Public reject handle alias.
+ */
+using Reject = promise::Reject;

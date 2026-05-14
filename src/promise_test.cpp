@@ -35,6 +35,7 @@ SOFTWARE.
 #include <winnt.h>
 #include <winreg.h>
 #include <exception>
+#include <iostream>
 
 WPromise<void>
 Test() {

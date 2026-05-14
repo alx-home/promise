@@ -100,7 +100,10 @@ template <class FUN, class... ARGS>
  * @return Constructed resolver-style promise.
  */
 template <class FUN, class... ARGS>
-   requires(!promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN> && promise::WITH_RESOLVER<FUN>)
+   requires(
+     !promise::IS_FUNCTION<FUN> && promise::function_constructible<FUN>
+     && promise::WITH_RESOLVER<FUN>
+   )
 [[nodiscard]] static constexpr auto MakeRPromise(FUN&& func, ARGS&&... args);
 
 /**

@@ -26,8 +26,10 @@ SOFTWARE.
 
 #include <cassert>
 #include <functional>
+#include <optional>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace promise {
 
@@ -301,5 +303,45 @@ struct WReturnHelper<FUN, std::enable_if_t<std::tuple_size_v<all_args_t<FUN>> >=
 
 template <class FUN>
 using WReturn = typename WReturnHelper<std::remove_cvref_t<FUN>>::type;
+
+template <class FUN>
+using ThenReturn = details::WPromise<
+  std::conditional_t<IS_PROMISE_FUNCTION<FUN>, return_or_void_t<return_t<FUN>>, return_t<FUN>>>;
+
+template <class T, class T2>
+using CatchReturn2 = std::conditional_t<
+  std::is_void_v<T2> && std::is_void_v<T>,
+  details::WPromise<void>,
+  std::conditional_t<
+    std::is_void_v<T2>,
+    details::WPromise<std::optional<T>>,
+    std::conditional_t<
+      std::is_void_v<T>,
+      details::WPromise<std::optional<T2>>,
+      std::conditional_t<
+        std::is_same_v<T, T2>,
+        details::WPromise<T2>,
+        details::WPromise<std::variant<T2, T>>>>>>;
+
+template <class T, class FUN>
+using CatchReturn = CatchReturn2<
+  T,
+  std::conditional_t<IS_PROMISE_FUNCTION<FUN>, return_or_void_t<return_t<FUN>>, return_t<FUN>>>;
+
+template <class T>
+using FinallyReturn = details::WPromise<T>;
+
+template <class T>
+struct CRefOrVoid {
+   using type = T const&;
+};
+
+template <>
+struct CRefOrVoid<void> {
+   using type = void;
+};
+
+template <class T>
+using cref_or_void_t = typename CRefOrVoid<T>::type;
 
 }  // namespace promise

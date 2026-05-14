@@ -25,6 +25,7 @@ SOFTWARE.
 #pragma once
 
 #include "promise.h"
+
 #include <stdexcept>
 #include <type_traits>
 

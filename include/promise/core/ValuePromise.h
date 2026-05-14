@@ -24,7 +24,8 @@ SOFTWARE.
 
 #pragma once
 
-#include "../core/core.inl"
+#include "VPromise.h"
+#include "concepts.inl"
 
 #include <utils/Scoped.h>
 #include <cassert>
@@ -72,7 +73,7 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   [[nodiscard]] auto const& GetValue(this SELF&& self, Lock lock) {
+   [[nodiscard]] cref_or_void_t<T> GetValue(this SELF&& self, Lock lock) {
       (void)lock;
       assert(self.resolver_);
       assert(self.resolver_->value_);
@@ -86,7 +87,7 @@ public:
     */
    template <class SELF>
       requires(!IS_VOID)
-   [[nodiscard]] auto const& GetValue(this SELF&& self) {
+   [[nodiscard]] cref_or_void_t<T> GetValue(this SELF&& self) {
       std::shared_lock lock{self.mutex_};
       return self.GetValue(lock);
    }

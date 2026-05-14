@@ -22,14 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
-
-#include "core.h"
-
-#include "details/helpers.inl"
-#include "details/Resolver.inl"
 #include "details/Resolve.inl"
-#include "details/Reject.inl"
-#include "details/WPromise.inl"
-#include "details/Handle.inl"
-#include "details/Promise.inl"
+
+namespace promise {
+
+std::shared_ptr<Resolve<void>>
+Resolve<void>::Create(std::shared_ptr<Resolver<void>> resolver) {
+   struct MakeSharedEnabler : public Resolve<void> {
+      MakeSharedEnabler(std::shared_ptr<Resolver<void>> resolver)
+         : Resolve<void>(std::move(resolver)) {}
+   };
+   return std::make_shared<MakeSharedEnabler>(std::move(resolver));
+}
+
+}  // namespace promise

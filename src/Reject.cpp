@@ -22,41 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
-
-#include "concepts.inl"
-#include "helpers.inl"
-#include "Resolve.inl"
-#include "Reject.inl"
-#include "VPromise.inl"
-
-#include <cassert>
-#include <stdexcept>
+#include "details/Reject.inl"
 
 namespace promise {
 
-/**
- * @brief Base exception type used by the promise helpers.
- */
-struct Exception : std::runtime_error {
-   using std::runtime_error::runtime_error;
-};
-
-/**
- * @brief Await all promises and return a combined result.
- *
- * @param promise Promises to await.
- *
- * @return Tuple of resolved values (std::nullopt_t for void).
- */
-template <class... PROMISE>
-static constexpr auto All(PROMISE&&... promise);
-
-namespace details {
-template <class T, bool WITH_RESOLVER = false>
-class Promise;
+std::shared_ptr<Reject>
+Reject::Create(std::function<void(std::exception_ptr)> impl) {
+   struct MakeSharedEnabler : public Reject {
+      MakeSharedEnabler(std::function<void(std::exception_ptr)> impl)
+         : Reject(std::move(impl)) {}
+   };
+   return std::make_shared<MakeSharedEnabler>(std::move(impl));
 }
 
-template <class T>
-class Resolver;
 }  // namespace promise

@@ -44,13 +44,7 @@ private:
    Reject(std::function<void(std::exception_ptr)> impl);
 
 public:
-   static std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl) {
-      struct MakeSharedEnabler : public Reject {
-         MakeSharedEnabler(std::function<void(std::exception_ptr)> impl)
-            : Reject(std::move(impl)) {}
-      };
-      return std::make_shared<MakeSharedEnabler>(std::move(impl));
-   }
+   static std::shared_ptr<Reject> Create(std::function<void(std::exception_ptr)> impl);
 
    /**
     * @brief Reject the promise with an exception.
@@ -72,9 +66,7 @@ public:
     * @return True if this call rejected the promise, false if it was already rejected.
     */
    template <class EXCEPTION>
-   bool operator()(EXCEPTION&& exception) const {
-      return (*this)(std::make_exception_ptr(std::forward<EXCEPTION>(exception)));
-   }
+   bool operator()(EXCEPTION&& exception) const;
 
    /**
     * @brief Reject the promise with an exception of type EXCEPTION constructed with ARGS.
@@ -87,9 +79,7 @@ public:
     * @return True if this call rejected the promise, false if it was already rejected.
     */
    template <class EXCEPTION, class... ARGS>
-   bool Apply(ARGS&&... args) const {
-      return (*this)(std::make_exception_ptr(EXCEPTION(std::forward<ARGS>(args)...)));
-   }
+   bool Apply(ARGS&&... args) const;
 
    /**
     * @brief Check whether this rejector can still reject.

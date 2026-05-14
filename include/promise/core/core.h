@@ -24,12 +24,39 @@ SOFTWARE.
 
 #pragma once
 
-#include "core.h"
+#include "concepts.inl"
+#include "helpers.h"
+#include "Resolve.h"
+#include "Reject.h"
+#include "VPromise.h"
 
-#include "details/helpers.inl"
-#include "details/Resolver.inl"
-#include "details/Resolve.inl"
-#include "details/Reject.inl"
-#include "details/WPromise.inl"
-#include "details/Handle.inl"
-#include "details/Promise.inl"
+#include <cassert>
+#include <stdexcept>
+
+namespace promise {
+
+/**
+ * @brief Base exception type used by the promise helpers.
+ */
+struct Exception : std::runtime_error {
+   using std::runtime_error::runtime_error;
+};
+
+/**
+ * @brief Await all promises and return a combined result.
+ *
+ * @param promise Promises to await.
+ *
+ * @return Tuple of resolved values (std::nullopt_t for void).
+ */
+template <class... PROMISE>
+static constexpr auto All(PROMISE&&... promise);
+
+namespace details {
+template <class T, bool WITH_RESOLVER = false>
+class Promise;
+}
+
+template <class T>
+class Resolver;
+}  // namespace promise

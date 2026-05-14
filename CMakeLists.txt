@@ -14,6 +14,9 @@ endif()
 
 win32_library(TARGET_NAME alx-home_promise
     FILES
+  src/Memcheck.cpp
+  src/Reject.cpp
+  src/Resolve.cpp
   src/Promise.cpp
   src/CVPromise.cpp
   src/StatePromise.cpp

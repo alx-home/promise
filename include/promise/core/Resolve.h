@@ -25,10 +25,8 @@ SOFTWARE.
 #pragma once
 
 #include <cassert>
-#include <functional>
 #include <memory>
 #include <type_traits>
-#include <variant>
 
 namespace promise {
 
@@ -55,13 +53,7 @@ private:
    Resolve(std::shared_ptr<Resolver<void>> resolver);
 
 public:
-   static std::shared_ptr<Resolve<void>> Create(std::shared_ptr<Resolver<void>> resolver) {
-      struct MakeSharedEnabler : public Resolve<void> {
-         MakeSharedEnabler(std::shared_ptr<Resolver<void>> resolver)
-            : Resolve<void>(std::move(resolver)) {}
-      };
-      return std::make_shared<MakeSharedEnabler>(std::move(resolver));
-   }
+   static std::shared_ptr<Resolve<void>> Create(std::shared_ptr<Resolver<void>> resolver);
 
    /**
     * @brief Resolve the promise.
@@ -96,13 +88,7 @@ private:
    Resolve(std::shared_ptr<Resolver<T>> resolver);
 
 public:
-   static constexpr std::shared_ptr<Resolve<T>> Create(std::shared_ptr<Resolver<T>> resolver) {
-      struct MakeSharedEnabler : public Resolve<T> {
-         MakeSharedEnabler(std::shared_ptr<Resolver<T>> resolver)
-            : Resolve<T>(std::move(resolver)) {}
-      };
-      return std::make_shared<MakeSharedEnabler>(std::move(resolver));
-   }
+   static std::shared_ptr<Resolve<T>> Create(std::shared_ptr<Resolver<T>> resolver);
 
    /**
     * @brief Resolve the promise with a value.

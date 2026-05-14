@@ -25,7 +25,6 @@ SOFTWARE.
 #pragma once
 
 #include "promise.h"
-#include "core/concepts.inl"
 
 #include <utils/Pool.h>
 #include <optional>

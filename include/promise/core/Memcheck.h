@@ -24,11 +24,10 @@ SOFTWARE.
 
 #pragma once
 
-#include "../core/core.inl"
+#include "VPromise.h"
 
 #include <utils/Scoped.h>
 #include <cassert>
-#include <iostream>
 #include <mutex>
 #include <unordered_set>
 
@@ -56,14 +55,7 @@ struct Refcount {
     *
     * @param ptr Pointer to the promise being tracked.
     */
-   explicit Refcount(VPromise* ptr) {
-      ++counter;
-#   ifdef PROMISE_MEMCHECK_FULL
-      std::lock_guard lock{mutex};
-      ptrs.emplace(ptr);
-      ptr_ = ptr;
-#   endif
-   }
+   explicit Refcount(VPromise* ptr);
 
    Refcount(Refcount&&) noexcept                 = delete;
    Refcount(Refcount const&) noexcept            = delete;
@@ -73,17 +65,24 @@ struct Refcount {
    /**
     * @brief Destructor that decrements the counter and removes the pointer from tracking.
     */
-   ~Refcount() {
-      --counter;
-#   ifdef PROMISE_MEMCHECK_FULL
-      std::lock_guard lock{mutex};
-      ptrs.erase(ptr_);
-#   endif
-   }
+   ~Refcount();
 };
 #endif  // PROMISE_MEMCHECK
 
 #ifdef PROMISE_MEMCHECK
+namespace mmchk {
+struct Check {
+   Check() = default;
+
+   Check(Check&&) noexcept            = delete;
+   Check(Check const&)                = delete;
+   Check& operator=(Check&&) noexcept = delete;
+   Check& operator=(Check const&)     = delete;
+
+   ~Check();
+};
+}  // namespace mmchk
+
 /**
  * @brief Helper for memory leak detection in debug mode.
  * When enabled, this function returns a scope guard that checks for active promises on destruction.
@@ -94,35 +93,7 @@ struct Refcount {
  *
  * @return Scope guard that checks for memory leaks on destruction.
  */
-[[nodiscard]] constexpr auto
-Memcheck() {
-   struct Check {
-      Check() = default;
-
-      Check(Check&&) noexcept            = delete;
-      Check(Check const&)                = delete;
-      Check& operator=(Check&&) noexcept = delete;
-      Check& operator=(Check const&)     = delete;
-
-      ~Check() {
-         auto const refcount = Refcount::counter.load();
-
-         if (refcount) {
-            std::cerr << "Promise: Leak memory detected (" << refcount << " unterminated promises)"
-                      << std::endl;
-#   ifdef PROMISE_MEMCHECK_FULL
-            auto const& ptrs = Refcount::ptrs;
-            for (auto const& ptr : ptrs) {
-               std::cout << "At addr: " << ptr << std::endl;
-            }
-#   endif
-            assert(false);
-         }
-      }
-   };
-
-   return Check{};
-}
+[[nodiscard]] mmchk::Check Memcheck();
 #endif  // PROMISE_MEMCHECK
 
 }  // namespace promise

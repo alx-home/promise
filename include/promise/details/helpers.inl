@@ -24,7 +24,9 @@ SOFTWARE.
 
 #pragma once
 
-#include "../core/core.inl"
+#include "../core/helpers.h"
+
+#include "../core/core.h"
 
 #include <sys/stat.h>
 #include <utils/Scoped.h>
