@@ -76,7 +76,7 @@ jobs:
          - name: Upload release library artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-linux-gcc-${{ github.ref_name }}
+              name: promise-release-linux-gcc
               path: release-artifacts/
 
    linux-release-clang:
@@ -118,7 +118,7 @@ jobs:
          - name: Upload release library artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-linux-clang-${{ github.ref_name }}
+              name: promise-release-linux-clang
               path: release-artifacts/
 
    windows-release-clang-cl:
@@ -162,7 +162,7 @@ jobs:
          - name: Upload Windows release artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-windows-clang-cl-${{ github.ref_name }}
+              name: promise-release-windows-clang-cl
               path: release-artifacts-windows/
 
    windows-release-msvc:
@@ -214,5 +214,5 @@ jobs:
          - name: Upload Windows release artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-windows-msvc-${{ github.ref_name }}
+              name: promise-release-windows-msvc
               path: release-artifacts-msvc/
