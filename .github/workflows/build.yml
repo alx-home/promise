@@ -216,18 +216,29 @@ jobs:
            run: choco install -y ninja
            shell: powershell
 
-         - name: Configure Windows Release with cl.exe
+         - name: Configure Windows Release with cl.exe (Ninja + MSVC)
+           shell: cmd
            run: |
-              cmake -S . -B build-msvc -G "Ninja" ^
+              rem find Visual Studio installation path
+              for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+              if not defined VSINSTALL (
+                echo Visual Studio not found
+                exit /b 1
+              )
+              rem initialize MSVC environment for x64
+              call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
+              rem configure with Ninja using MSVC toolchain
+              cmake -S . -B build-msvc -G "Ninja" -A x64 ^
                 -DCMAKE_C_COMPILER=cl.exe ^
                 -DCMAKE_CXX_COMPILER=cl.exe ^
                 -DCMAKE_BUILD_TYPE=Release ^
                 -DPROMISE_BUILD_TESTS=OFF
-           shell: cmd
 
          - name: Build Windows release library
-           run: cmake --build build-msvc --config Release --target alx-home_promise
            shell: cmd
+           run: |
+              call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
+              cmake --build build-msvc --config Release --target alx-home_promise
 
          - name: Collect Windows release artifacts
            run: |
