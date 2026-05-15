@@ -75,7 +75,7 @@ jobs:
               SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
               SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
 
-   linux-release:
+   linux-release-gcc:
       name: Linux Release with gcc-14
       runs-on: ubuntu-24.04
 
@@ -114,7 +114,49 @@ jobs:
          - name: Upload release library artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-lib-${{ github.ref_name }}
+              name: promise-release-linux-gcc-${{ github.ref_name }}
+              path: release-artifacts/
+
+   linux-release-clang:
+      name: Linux Release with clang
+      runs-on: ubuntu-24.04
+
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+
+         - name: Install build tools
+           run: |
+              sudo apt-get update
+              sudo apt-get install -y cmake ninja-build clang
+
+         - name: Configure Release
+           run: >-
+              cmake
+              -S .
+              -B build-release
+              -G Ninja
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+              -DCMAKE_BUILD_TYPE=Release
+              -DPROMISE_BUILD_TESTS=OFF
+
+         - name: Build release library
+           run: cmake --build build-release --target alx-home_promise --config Release
+
+         - name: Collect release library artifacts
+           run: |
+              mkdir -p release-artifacts
+              find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
+                cp "$lib" release-artifacts/
+              done
+              test -n "$(ls -A release-artifacts)"
+
+         - name: Upload release library artifacts
+           uses: actions/upload-artifact@v4
+           with:
+              name: promise-release-linux-clang-${{ github.ref_name }}
               path: release-artifacts/
 
    windows-release:
