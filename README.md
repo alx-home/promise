@@ -101,7 +101,56 @@ You can safely resolve, reject, chain, and `co_await` promises from **any thread
 
 Choose one of the following installation methods.
 
-#### Option 1: CMake (`FetchContent`)
+#### Option 1: Conan
+
+Use Conan 2 with `CMakeDeps` and `CMakeToolchain`:
+
+```text
+[requires]
+alx-promise/1.6.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+```
+
+Then configure your project with Conan's generated toolchain:
+
+```powershell
+conan install . -s build_type=Debug --build=missing
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake
+cmake --build build
+```
+
+Example CMake usage:
+
+```cmake
+find_package(alx-promise CONFIG REQUIRED)
+
+target_link_libraries(your_target PRIVATE alx-home::promise)
+```
+
+#### Option 2: `vcpkg`
+
+You can also install this library with `vcpkg`.
+
+Then configure your project with vcpkg's toolchain:
+
+```powershell
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=path\to\vcpkg\scripts\buildsystems\vcpkg.cmake
+# eg: C:/Program Files/Microsoft Visual Studio/18/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+```
+
+Example CMake usage:
+
+```cmake
+find_package(alx-promise CONFIG REQUIRED)
+
+target_link_libraries(your_target PRIVATE alx-home::promise)
+```
+
+#### Option 3: CMake (`FetchContent`)
 
 Add `promise` directly to your CMake project:
 
@@ -121,12 +170,6 @@ FetchContent_MakeAvailable(alx_home_promise)
 
 target_link_libraries(your_target PRIVATE alx-home::promise)
 ```
-
-#### Option 2: `vcpkg`
-
-You can also install this library with `vcpkg`.
-For a complete vcpkg-integrated setup, see: https://github.com/alx-home/promise_exemples
-
 
 ### Usage examples
 
