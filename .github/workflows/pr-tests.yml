@@ -190,7 +190,7 @@ jobs:
               rem initialize MSVC environment for x64
               call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
               rem configure with Ninja using MSVC toolchain
-              cmake -S . -B build-msvc -G "Ninja" -A x64 ^
+              cmake -S . -B build-msvc -G "Ninja" ^
                 -DCMAKE_C_COMPILER=cl.exe ^
                 -DCMAKE_CXX_COMPILER=cl.exe ^
                 -DCMAKE_BUILD_TYPE=Release ^
