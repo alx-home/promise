@@ -93,15 +93,16 @@ You can safely resolve, reject, chain, and `co_await` promises from **any thread
 
 ## Requirements
 
-- c++23 compiler.
-- CMake 3.20+.
-- Git access if CMake needs to fetch `build_tools` or `cpp_utils` automatically.
+- `C++23` compiler.
+- `CMake 3.20+`.
+- `Conan 2.x` or `vcpkg` (optional, for dependency management).
+- `Git` access if CMake needs to fetch **build_tools** or **cpp_utils** automatically.
 
 ## Install instructions
 
 Choose one of the following installation methods.
 
-#### Option 1: Conan
+#### Option 1: `Conan`
 
 Use Conan 2 with `CMakeDeps` and `CMakeToolchain`:
 
