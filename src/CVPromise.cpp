@@ -26,7 +26,7 @@ SOFTWARE.
 
 /** @brief Constructs a new CVPromise with a fresh promise state. */
 CVPromise::CVPromise()
-   : CVPromise([] constexpr {
+   : CVPromise([] {
       auto [promise, resolve, reject] = Promise<void>::Create();
       return std::make_tuple(std::make_unique<WPromise<void>>(std::move(promise)), resolve, reject);
    }()) {}
