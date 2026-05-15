@@ -159,7 +159,7 @@ jobs:
               name: promise-release-linux-clang-${{ github.ref_name }}
               path: release-artifacts/
 
-   windows-release:
+   windows-release-clang-cl:
       name: Windows Release with clang-cl
       runs-on: windows-latest
 
@@ -200,5 +200,44 @@ jobs:
          - name: Upload Windows release artifacts
            uses: actions/upload-artifact@v4
            with:
-              name: promise-release-windows-${{ github.ref_name }}
+              name: promise-release-windows-clang-cl-${{ github.ref_name }}
               path: release-artifacts-windows/
+
+   windows-release-msvc:
+      name: Windows Release with cl.exe (MSVC)
+      runs-on: windows-latest
+
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+
+         - name: Install Ninja
+           run: choco install -y ninja
+           shell: powershell
+
+         - name: Configure Windows Release with cl.exe
+           run: |
+              cmake -S . -B build-msvc -G "Ninja" ^
+                -DCMAKE_C_COMPILER=cl.exe ^
+                -DCMAKE_CXX_COMPILER=cl.exe ^
+                -DCMAKE_BUILD_TYPE=Release ^
+                -DPROMISE_BUILD_TESTS=OFF
+           shell: cmd
+
+         - name: Build Windows release library
+           run: cmake --build build-msvc --config Release --target alx-home_promise
+           shell: cmd
+
+         - name: Collect Windows release artifacts
+           run: |
+              mkdir -p release-artifacts-msvc
+              for /r build-msvc %%f in (*.lib *.dll *.a *.so) do copy "%%f" release-artifacts-msvc\
+              if not exist release-artifacts-msvc\ ( exit 1 )
+           shell: cmd
+
+         - name: Upload Windows release artifacts
+           uses: actions/upload-artifact@v4
+           with:
+              name: promise-release-windows-msvc-${{ github.ref_name }}
+              path: release-artifacts-msvc/
