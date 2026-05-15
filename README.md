@@ -93,7 +93,7 @@ You can safely resolve, reject, chain, and `co_await` promises from **any thread
 
 ## Requirements
 
-- `C++23` compiler.
+- `C++23` compiler (GCC 14+, Clang 17+, MSVC 19.36+).
 - `CMake 3.20+`.
 - `Conan 2.x` or `vcpkg` (optional, for dependency management).
 - `Git` access if CMake needs to fetch **build_tools** or **cpp_utils** automatically.
