@@ -97,11 +97,16 @@ You can safely resolve, reject, chain, and `co_await` promises from **any thread
 - CMake 3.20+.
 - Git access if CMake needs to fetch `build_tools` or `cpp_utils` automatically.
 
-## Consume with CMake
+## Install instructions
 
-This project can be pulled directly into another CMake build with `FetchContent`.
-If the `win32_library` / `win32_executable` helpers are not already defined, `promise` will fetch `build_tools` automatically.
-If `alx-home::cpp_utils` is not already defined, `promise` will fetch that dependency automatically as well.
+Choose one of the following installation methods.
+
+#### Option 1: CMake (`FetchContent`)
+
+Add `promise` directly to your CMake project:
+
+- If `win32_library` / `win32_executable` are not available, `promise` automatically fetches `build_tools`.
+- If `alx-home::cpp_utils` is not available, `promise` automatically fetches that dependency as well.
 
 ```cmake
 include(FetchContent)
@@ -117,13 +122,25 @@ FetchContent_MakeAvailable(alx_home_promise)
 target_link_libraries(your_target PRIVATE alx-home::promise)
 ```
 
-Useful cache variables:
+#### Option 2: `vcpkg`
 
-- `PROMISE_BUILD_TESTS=OFF` disables the local `promise_test` executable. This defaults to `OFF` when `promise` is added as a subproject.
-- `PROMISE_FETCH_BUILD_TOOLS=OFF` requires the caller to provide `win32_library` and `win32_executable`.
-- `PROMISE_BUILD_TOOLS_GIT_REPOSITORY` and `PROMISE_BUILD_TOOLS_GIT_TAG` let you pin or mirror the helper repository.
-- `PROMISE_FETCH_CPP_UTILS=OFF` requires the caller to provide `alx-home::cpp_utils`.
-- `PROMISE_CPP_UTILS_GIT_REPOSITORY` and `PROMISE_CPP_UTILS_GIT_TAG` let you pin or mirror the dependency source.
+You can also install this library with `vcpkg`.
+For a complete vcpkg-integrated setup, see: https://github.com/alx-home/promise_exemples
+
+
+### Usage examples
+
+Usage examples can be found at: https://github.com/alx-home/promise_exemples
+
+> ⚠️ Warning: that example repository has not been formally reviewed and was generated with Copilot assistance.
+
+### Useful cache variables
+
+- `PROMISE_BUILD_TESTS=OFF` disables the local `promise_test` executable. This is `OFF` by default when `promise` is added as a subproject.
+- `PROMISE_FETCH_BUILD_TOOLS=OFF` means the caller must provide `win32_library` and `win32_executable`.
+- `PROMISE_BUILD_TOOLS_GIT_REPOSITORY` and `PROMISE_BUILD_TOOLS_GIT_TAG` allow pinning or mirroring the helper repository.
+- `PROMISE_FETCH_CPP_UTILS=OFF` means the caller must provide `alx-home::cpp_utils`.
+- `PROMISE_CPP_UTILS_GIT_REPOSITORY` and `PROMISE_CPP_UTILS_GIT_TAG` allow pinning or mirroring the dependency source.
 
 ## Quick start
 
