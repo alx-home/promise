@@ -199,6 +199,8 @@ jobs:
          - name: Build Windows release library
            shell: cmd
            run: |
+              rem locate Visual Studio again (same as above)
+              for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
               call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
               cmake --build build-msvc --config Release --target alx-home_promise
 
