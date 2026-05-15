@@ -182,7 +182,13 @@ Promise<T, WITH_RESOLVER>::Await(std::coroutine_handle<> h, UniqueLock lock) {
    this->cv_.notify_all();
 
    awaiters_.emplace_back(h);
-   std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
+   std::visit(
+     [this]([[maybe_unused]] auto& lock) {
+        (void)this;
+        assert(!this->IsDone(lock));
+     },
+     lock
+   );
 }
 
 /**
@@ -201,7 +207,13 @@ Promise<T, WITH_RESOLVER>::Await(std::function<void()> fun, UniqueLock lock) {
    this->cv_.notify_all();
 
    awaiters_.emplace_back(AwaitFunction{std::move(fun), id});
-   std::visit([this](auto& lock) { assert(!this->IsDone(lock)); }, lock);
+   std::visit(
+     [this]([[maybe_unused]] auto& lock) {
+        (void)this;
+        assert(!this->IsDone(lock));
+     },
+     lock
+   );
    return id;
 }
 
