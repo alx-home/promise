@@ -23,12 +23,54 @@ SOFTWARE.
 */
 
 #include "StatePromise.h"
+#include <cassert>
+
+/** @brief Constructs a new StatePromise with a fresh promise state. */
+StatePromise::StatePromise()
+   : StatePromise(
+       [] {
+          auto [promise, resolve, reject] = Promise<void>::Create();
+          return std::make_tuple(std::move(promise), resolve, reject);
+       }(),
+       [] {
+          auto [promise, resolve, reject] = Promise<void>::Create();
+          return std::make_tuple(std::move(promise), resolve, reject);
+       }()
+     ) {}
+
+/** @brief Constructs a StatePromise from pre-created promise components.
+ *
+ * @param ready_promise Tuple containing the ready promise, resolve callback, and reject callback.
+ * @param done_promise Tuple containing the done promise, resolve callback, and reject callback
+ */
+StatePromise::StatePromise(
+  std::tuple<
+    WPromise<void>,
+    std::shared_ptr<promise::Resolve<void>>,
+    std::shared_ptr<promise::Reject>>&& ready_promise,
+  std::tuple<
+    WPromise<void>,
+    std::shared_ptr<promise::Resolve<void>>,
+    std::shared_ptr<promise::Reject>>&& done_promise
+)
+   : ready_promise_(std::move(std::get<0>(ready_promise)))
+   , ready_resolve_(std::move(std::get<1>(ready_promise)))
+   , ready_reject_(std::move(std::get<2>(ready_promise)))
+   , done_promise_(std::move(std::get<0>(done_promise)))
+   , done_resolve_(std::move(std::get<1>(done_promise)))
+   , done_reject_(std::move(std::get<2>(done_promise))) {}
 
 /** @brief Marks the state promise as done during destruction.
  *
  * This unblocks waiters by transitioning internal promises to their done state.
  */
-StatePromise::~StatePromise() { Done(); }
+StatePromise::~StatePromise() {
+   assert(ready_resolve_);
+   assert(done_resolve_);
+
+   (*ready_resolve_)();
+   (*done_resolve_)();
+}
 
 /** @brief Get the promise resolved when Ready() is called.
  *
@@ -36,16 +78,16 @@ StatePromise::~StatePromise() { Done(); }
  */
 WPromise<void>
 StatePromise::WaitReady() const {
-   return *ready_promise_;
+   return ready_promise_;
 }
 
 /** @brief Get the promise resolved when Done() is called.
  *
- * @return Promise resolved or rejected when Done() is called.
+ * @return Promise resolved when Done() is called.
  */
 WPromise<void>
 StatePromise::WaitDone() const {
-   return *done_promise_;
+   return done_promise_;
 }
 
 /** @brief Get the promise resolved when either Ready() or Done() is called.
@@ -54,7 +96,25 @@ StatePromise::WaitDone() const {
  */
 WPromise<void>
 StatePromise::Wait() const {
-   return promise::Race(*done_promise_, *ready_promise_);
+   return promise::Race(WaitDone(), WaitReady());
+}
+
+/** @brief Get the promise resolved when either Ready() or Done() is called.
+ *
+ * @return Promise that completes when either WaitReady() or WaitDone() completes.
+ */
+WPromise<void>
+StatePromise::WaitWithReject() const {
+   return promise::Race(WaitDoneWithReject(), WaitReady());
+}
+
+/** @brief Waits for the promise to be done with rejection.
+ *
+ * @return A promise that rejects when the state promise is done.
+ */
+[[nodiscard]] WPromise<void>
+StatePromise::WaitDoneWithReject() const {
+   return done_promise_.Then([] { throw End(); });
 }
 
 /** @brief Marks the state as ready.
@@ -63,35 +123,40 @@ StatePromise::Wait() const {
  */
 void
 StatePromise::Ready() {
-   done_promise_.Reset();
-   ready_promise_.Notify();
+   assert(ready_resolve_);
+   assert(!ready_promise_.Done());
+   assert(!done_promise_.Done());
+
+   (*ready_resolve_)();
 }
 
 /** @brief Marks the state as done and rejects waiters with end-of-life semantics. */
 void
 StatePromise::Done() {
-   done_promise_.Reject<CVPromise::End>();
+   assert(done_resolve_);
 
-   if (ready_promise_->Resolved()) {
-      ready_promise_.Reset();
-      ready_promise_.Reject<CVPromise::End>();
-   } else {
-      ready_promise_.Reject<CVPromise::End>();
-   }
+   (*done_resolve_)();
+   (*ready_resolve_)();
 }
 
 /** @brief Reports whether both internal promises reached the done state.
  *
- * @return true when both ready and done promises are rejected.
+ * @return true when both ready and done promises are resolved.
  */
 bool
 StatePromise::IsDone() const {
-   return done_promise_->Rejected() && ready_promise_->Rejected();
+   return done_promise_.Resolved() && ready_promise_.Resolved();
 }
 
 /** @brief Resets both internal promises to their initial pending state. */
 void
 StatePromise::Reset() {
-   ready_promise_.Reset();
-   done_promise_.Reset();
+   if (done_promise_.Resolved()) {
+      assert(ready_promise_.Resolved());
+
+      std::tie(ready_promise_, ready_resolve_, ready_reject_) = Promise<void>::Create();
+      std::tie(done_promise_, done_resolve_, done_reject_)    = Promise<void>::Create();
+   } else if (ready_promise_.Resolved()) {
+      std::tie(ready_promise_, ready_resolve_, ready_reject_) = Promise<void>::Create();
+   }
 }

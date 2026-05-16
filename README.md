@@ -372,9 +372,8 @@ auto err2 = MakeReject<Promise<int>, std::runtime_error>("failed fast"); // Same
 
 // -----------------------------------------------------------------------------
 // CVPromise — coroutine‑friendly condition‑variable style primitive
-// - co_await *ready     waits until the notifier signals
+// - co_await *ready     waits until the notifier signals (Notify)
 // - Notify()            resolves all current waiters (one‑shot signal)
-// - Reset()             resolves current waiters AND arms the next wait cycle
 // - Destroying or rejecting the notifier throws CVPromise::End in waiters
 // -----------------------------------------------------------------------------
 
@@ -383,32 +382,31 @@ CVPromise ready;
 // Notify all current waiters (one‑shot)
 ready.Notify();
 
-// Reset the CVPromise:
-// - prepares the next wait cycle for future waiters
-// - If the current promise is still pending, this function is a no-op.
-ready.Reset();
-
 // Wait for Notify()
 co_await *ready;  
 
 // -----------------------------------------------------------------------------
 // StatePromise — coroutine‑friendly state-transition primitive
-// - Ready()      signals the "ready" state (non‑terminal)
-// - Done()       signals the "done" state (terminal)
+// - Ready()      signals the "ready" state (non‑terminal, can be reused after Reset)
+// - Done()       signals the "done" state (terminal, unblocks all waiters)
 // - Wait()       waits for either Ready or Done
 // - WaitReady()  waits specifically for Ready
 // - WaitDone()   waits specifically for Done
+// - WaitDoneWithReject() waits for Done and rejects with End
+// - WaitWithReject() waits for Ready or rejects with End if Done comes first
 // - IsDone()     returns true only if the state has reached the Done state
-// - Reset()      returns the state to its initial (not ready, not done) form
+// - Reset()      returns the state to its initial (not ready, not done) form for reuse
 // -----------------------------------------------------------------------------
 StatePromise state;
 
-state.Ready();               // Signal the Ready state
-state.Done();                // Transition to the Done state (terminal)
+state.Ready();               // Signal the Ready state (non-terminal)
+state.Done();                // Transition to the Done state (terminal, unblocks all waiters)
 
-co_await state.Wait();       // Waits for Ready or Done
-co_await state.WaitReady();  // Waits until Ready is signaled
-co_await state.WaitDone();   // Waits until Done is signaled
+co_await state.Wait();           // Waits for Ready or Done
+co_await state.WaitReady();      // Waits until Ready is signaled
+co_await state.WaitDone();       // Waits until Done is signaled
+co_await state.WaitDoneWithReject(); // Waits for Done, rejects with End
+co_await state.WaitWithReject();     // Waits for Ready, or rejects with End if Done comes first
 
 [[maybe_unused]] bool done = state.IsDone();  // true only if Done() was signaled
 
@@ -696,8 +694,8 @@ Return-type rules for `Race`:
 
 ## `CVPromise` for async notification
 
-`CVPromise` is a small condition-variable-style helper for coroutines. Include it with
-`#include <promise/CVPromise.h>` when you want one or more coroutines to wait for a signal.
+`CVPromise` is a coroutine-friendly condition-variable style helper for async notification.
+Include it with `#include <promise/CVPromise.h>` when you want one or more coroutines to wait for a signal.
 
 ```cpp
 #include <promise/CVPromise.h>
@@ -705,31 +703,27 @@ Return-type rules for `Race`:
 CVPromise ready;
 
 WPromise waiter{[&]() -> Promise<void> {
-	try {
-		co_await *ready;
-	} catch (const CVPromise::End&) {
-		// The notifier was destroyed or rejected.
-	}
-	co_return;
+    try {
+        co_await *ready; // or co_await ready.Wait();
+    } catch (const CVPromise::End&) {
+        // The notifier was destroyed, or rejected.
+    }
+    co_return;
 }};
 
 ready.Notify(); // resolves the current waiters
-ready.Reset();  // resolves current waiters and arms the next wait
 ```
 
 Notes:
 
-- `Wait()` returns a `WPromise<void>` and `CVPromise` can also be used directly in `co_await`.
-- `operator*()` returns the current `WPromise<void>`, so `co_await *ready;` is equivalent to `co_await ready.Wait();`.
-- `operator->()` gives access to the underlying promise handle for inspection such as `ready->Resolved()`.
-- `Notify()` resolves the current wait state.
-- `Reset()` resolves the current waiters and creates a fresh wait state for the next cycle.
-- Destroying a `CVPromise` rejects outstanding waiters with `CVPromise::End`.
+- `Wait()` returns a `WPromise<void>`; `CVPromise` can also be used directly in `co_await` via `operator*()`.
+- `Notify()` resolves all current waiters (one-shot signal).
+- Destroying or rejecting a `CVPromise` rejects outstanding waiters with `CVPromise::End`.
 
 ## `StatePromise` for ready/done workflows
 
-`StatePromise` combines two `CVPromise` instances into a small helper for state-machine style
-coordination between coroutines.
+`StatePromise` is a coroutine-friendly state-transition primitive for coordinating ready/done workflows.
+It combines two `CVPromise` instances to allow explicit signaling and waiting for "ready" and "done" states.
 
 ```cpp
 #include <promise/StatePromise.h>
@@ -737,27 +731,43 @@ coordination between coroutines.
 StatePromise state;
 
 WPromise worker{[&]() -> Promise<void> {
-	co_await state.WaitReady();
-	// Start work after the state becomes ready.
-	co_await state.WaitDone();
-	co_return;
+    co_await state.WaitReady(); // Wait for Ready
+    // ... do work ...
+    co_await state.WaitDone();  // Wait for Done
+    co_return;
 }};
 
-state.Ready();
-state.Done();
+state.Ready(); // Signal the Ready state (non-terminal)
+state.Done();  // Signal the Done state (terminal, unblocks all waiters)
 
 if (state.IsDone()) {
-	// ready/done cycle is complete
+    // ready/done cycle is complete
 }
+
+// Wait for Ready or Done (whichever comes first)
+co_await state.Wait();
+
+// Wait for Ready, or reject with End if Done comes first
+co_await state.WaitWithReject();
+
+// Wait for Done, or reject with End
+co_await state.WaitDoneWithReject();
+
+// Reset to initial state (neither Ready nor Done)
+state.Reset();
 ```
 
 Methods:
 
+- `Ready()` signals the ready state (non-terminal).
+- `Done()` signals the done state (terminal, unblocks all waiters).
 - `WaitReady()` waits until `Ready()` is called.
 - `WaitDone()` waits until `Done()` is called.
-- `Wait()` races ready/done and resolves when one of them happens first.
-- `Reset()` arms the helper again for the next cycle.
+- `Wait()` resolves when either `Ready()` or `Done()` is called.
+- `WaitWithReject()` resolves when `Ready()` is called, or rejects with `End` if `Done()` comes first.
+- `WaitDoneWithReject()` waits for `Done()` and rejects with `End`.
 - `IsDone()` returns `true` once the done state has been reached.
+- `Reset()` returns the state to its initial (not ready, not done) form for reuse.
 
 Destroying a `StatePromise` calls `Done()` so waiting coroutines are unblocked.
 

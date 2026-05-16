@@ -419,7 +419,7 @@ TEST_CASE("Asynchronous Catch can await another promise before recovering", "[pr
    REQUIRE((*resolve)());
    REQUIRE_FALSE((*reject)(std::make_exception_ptr(TestError{"ignored"})));
 
-   p.WaitDone();
+   REQUIRE(p.Done());
 
    REQUIRE(p.Resolved());
    REQUIRE(p.Value() == "test async");
@@ -489,36 +489,58 @@ TEST_CASE("Race rejection flows through Catch into optional variant", "[promise]
    REQUIRE_FALSE((*reject)(std::make_exception_ptr(TestError{"ignored"})));
 }
 
-TEST_CASE("CVPromise notifies, resets and rejects", "[promise]") {
+TEST_CASE("CVPromise notifies, rejects, and destructor behavior", "[promise]") {
    CVPromise cv;
 
    auto initial = cv.Wait();
    REQUIRE_FALSE(initial.Done());
 
    cv.Notify();
-   initial.WaitDone();
+   REQUIRE(initial.Done());
    REQUIRE(initial.Resolved());
 
-   cv.Reset();
-   auto reset = cv.Wait();
-   REQUIRE_FALSE(reset.Done());
-
+   bool     caught = false;
+   WPromise waiter{[&]() -> Promise<void> {
+      try {
+         co_await cv.Wait();
+      } catch (const TestError&) {
+         caught = true;
+      }
+      co_return;
+   }};
    cv.Reject<TestError>("boom");
-   reset.WaitDone();
+   REQUIRE(waiter.Done());
+   REQUIRE(caught);
 
-   REQUIRE(reset.Rejected());
-   RequireException<TestError>(reset.Exception());
+   // Test destructor rejects outstanding waiters
+   bool     end_caught = false;
+   auto     temp_cv    = std::make_unique<CVPromise>();
+   WPromise waiter2{[&]() -> Promise<void> {
+      try {
+         co_await temp_cv->Wait();
+      } catch (const CVPromise::End&) {
+         end_caught = true;
+      }
+      co_return;
+   }};
+   REQUIRE(!waiter2.Done());
+   REQUIRE(!end_caught);
+
+   temp_cv = nullptr;  // Destroy the CVPromise, should cause waiter to catch End
+
+   REQUIRE(waiter2.Done());
+   REQUIRE(end_caught);
 }
 
-TEST_CASE("StatePromise tracks ready and done transitions", "[promise]") {
+TEST_CASE("StatePromise tracks ready, done, and reject transitions", "[promise]") {
    StatePromise state;
 
    auto wait_any   = state.Wait();
    auto wait_ready = state.WaitReady();
 
    state.Ready();
-   wait_any.WaitDone();
-   wait_ready.WaitDone();
+   REQUIRE(wait_any.Done());
+   REQUIRE(wait_ready.Done());
 
    REQUIRE(wait_any.Resolved());
    REQUIRE(wait_ready.Resolved());
@@ -526,21 +548,51 @@ TEST_CASE("StatePromise tracks ready and done transitions", "[promise]") {
 
    auto wait_done = state.WaitDone();
    state.Done();
-   wait_done.WaitDone();
+   REQUIRE(wait_done.Done());
 
-   REQUIRE(wait_done.Rejected());
+   REQUIRE(wait_done.Resolved());
    REQUIRE(state.IsDone());
-   RequireException<CVPromise::End>(wait_done.Exception());
 
-   state.Reset();
-   auto reset_ready = state.WaitReady();
-   REQUIRE_FALSE(reset_ready.Done());
+   // Test WaitDoneWithReject
+   StatePromise state2;
+   auto         wait_done_reject = state2.WaitDoneWithReject();
+   state2.Done();
+   REQUIRE(wait_done_reject.Done());
+   REQUIRE(wait_done_reject.Rejected());
+   RequireException<StatePromise::End>(wait_done_reject.Exception());
 
-   // Ensure no pending waiter remains at scope exit.
-   state.Done();
-   reset_ready.WaitDone();
-   REQUIRE(reset_ready.Rejected());
-   RequireException<CVPromise::End>(reset_ready.Exception());
+   // Test WaitWithReject: resolves if Ready, rejects if Done
+   StatePromise state3;
+   auto         wait_with_reject = state3.WaitWithReject();
+   state3.Ready();
+   REQUIRE(wait_with_reject.Done());
+   REQUIRE(wait_with_reject.Resolved());
+
+   StatePromise state4;
+   auto         wait_with_reject2 = state4.WaitWithReject();
+   state4.Done();
+   REQUIRE(wait_with_reject2.Done());
+   REQUIRE(wait_with_reject2.Rejected());
+   RequireException<StatePromise::End>(wait_with_reject2.Exception());
+
+   // Test destructor calls Done
+   bool     end_caught_state = false;
+   auto     temp_state       = std::make_unique<StatePromise>();
+   WPromise waiter_state{[&]() -> Promise<void> {
+      try {
+         co_await temp_state->WaitDoneWithReject();
+      } catch (const StatePromise::End&) {
+         end_caught_state = true;
+      }
+      co_return;
+   }};
+   REQUIRE(!waiter_state.Done());
+   REQUIRE(!end_caught_state);
+
+   temp_state = nullptr;  // Destroy the StatePromise, should cause waiter to catch End
+
+   REQUIRE(waiter_state.Done());
+   REQUIRE(end_caught_state);
 }
 
 TEST_CASE("MessageQueue dispatch runs work and resolves on queue thread", "[promise]") {
@@ -553,6 +605,7 @@ TEST_CASE("MessageQueue dispatch runs work and resolves on queue thread", "[prom
    });
 
    dispatched.WaitDone();
+   REQUIRE(dispatched.Done());
 
    REQUIRE(dispatched.Resolved());
    REQUIRE(dispatched.Value() == 42);
@@ -569,7 +622,7 @@ TEST_CASE("ToPointer exposes type-erased awaiting", "[promise]") {
       co_return 1;
    }};
 
-   waiter.WaitDone();
+   REQUIRE(waiter.Done());
 
    REQUIRE(waiter.Resolved());
    REQUIRE(waiter.Value() == 1);

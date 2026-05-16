@@ -23,12 +23,13 @@ SOFTWARE.
 */
 
 #include "CVPromise.h"
+#include <cassert>
 
 /** @brief Constructs a new CVPromise with a fresh promise state. */
 CVPromise::CVPromise()
    : CVPromise([] {
       auto [promise, resolve, reject] = Promise<void>::Create();
-      return std::make_tuple(std::make_unique<WPromise<void>>(std::move(promise)), resolve, reject);
+      return std::make_tuple(std::move(promise), resolve, reject);
    }()) {}
 
 /** @brief Constructs a CVPromise from pre-created promise components.
@@ -37,7 +38,7 @@ CVPromise::CVPromise()
  */
 CVPromise::CVPromise(
   std::tuple<
-    std::unique_ptr<WPromise<void>>,
+    WPromise<void>,
     std::shared_ptr<promise::Resolve<void>>,
     std::shared_ptr<promise::Reject>>&& cv
 )
@@ -49,7 +50,16 @@ CVPromise::CVPromise(
  *
  * This ensures pending waiters are released instead of blocking indefinitely.
  */
-CVPromise::~CVPromise() { Reject<End>(); }
+CVPromise::~CVPromise() {
+   auto const reject = [this] {
+      std::shared_lock lock{mutex_};
+      assert(reject_);
+      return reject_;
+   }();
+
+   assert(reject);
+   reject->Apply<End>();
+}
 
 /** @brief Returns the current waitable promise.
  *
@@ -58,7 +68,7 @@ CVPromise::~CVPromise() { Reject<End>(); }
 CVPromise::
 operator WPromise<void>() const {
    std::shared_lock lock{mutex_};
-   return *promise_;
+   return promise_;
 }
 
 /** @brief Returns the current waitable promise.
@@ -68,7 +78,7 @@ operator WPromise<void>() const {
 WPromise<void>
 CVPromise::Wait() const {
    std::shared_lock lock{mutex_};
-   return *promise_;
+   return promise_;
 }
 
 /** @brief Dereferences to the underlying promise.
@@ -78,50 +88,43 @@ CVPromise::Wait() const {
 WPromise<void>
 CVPromise::operator*() const {
    std::shared_lock lock{mutex_};
-   return *promise_;
-}
-
-/** @brief Provides pointer-style access to the underlying promise.
- *
- * @return Pointer to the stored WPromise<void>.
- */
-WPromise<void> const*
-CVPromise::operator->() const {
-   std::shared_lock lock{mutex_};
-   return promise_.get();
+   return promise_;
 }
 
 /** @brief Resolves the current promise state. */
 void
 CVPromise::Notify() {
-   auto const resolve = [this] {
-      std::shared_lock lock{mutex_};
+   auto const [resolve, old_promise] = [this] {
+      auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
+
+      std::unique_lock lock{mutex_};
       assert(resolve_);
-      return resolve_;
+
+      auto old_promise  = promise_;
+      auto old_resolver = resolve_;
+
+      promise_ = std::move(new_promise);
+      resolve_ = std::move(new_resolve);
+      reject_  = std::move(new_reject);
+
+      return std::make_pair(old_resolver, std::move(old_promise));
    }();
+
+   assert(resolve);
    (*resolve)();
+   assert(old_promise.Done());
 }
 
-/** @brief Reinitializes the internal promise after completion.
- *
- * If the current promise is still pending, this function is a no-op.
- */
-void
-CVPromise::Reset() {
-   std::unique_lock lock{mutex_};
+/** @brief Checks if the promise has been resolved. */
+bool
+CVPromise::Resolved() const {
+   std::shared_lock lock{mutex_};
+   return promise_.Resolved();
+}
 
-   assert(promise_);
-   if (!promise_->Done()) {
-      return;
-   }
-
-   auto resolve = resolve_;
-
-   auto promise = std::move(*promise_);
-
-   auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
-
-   promise_ = std::make_unique<WPromise<void>>(std::move(new_promise));
-   resolve_ = std::move(new_resolve);
-   reject_  = std::move(new_reject);
+/** @brief Checks if the promise has been rejected. */
+bool
+CVPromise::Rejected() const {
+   std::shared_lock lock{mutex_};
+   return promise_.Rejected();
 }

@@ -29,7 +29,20 @@ SOFTWARE.
 #include <stdexcept>
 #include <type_traits>
 
-/** @brief A promise that can be waited on, notified, and rejected. */
+/**
+ * @brief Coroutine-friendly condition-variable style primitive for async notification.
+ *
+ * CVPromise allows coroutines to wait for a signal (Notify), and supports resettable wait cycles.
+ * - Notify() resolves all current waiters (one-shot signal).
+ * - Wait() and operator*() provide awaitable handles for coroutines.
+ * - Destroying or rejecting the notifier throws CVPromise::End in waiters.
+ *
+ * Usage:
+ *   - Use Notify() to signal all current waiters.
+ *   - Wait() or co_await *cv to await the signal.
+ *   - Resolved()/Rejected() to inspect state.
+ *   - Destroying the CVPromise rejects outstanding waiters with End.
+ */
 struct CVPromise {
 public:
    /**
@@ -43,7 +56,9 @@ public:
          : std::runtime_error("Promise ended") {}
    };
 
-   /** @brief Constructs a new CVPromise. */
+   /**
+    * @brief Constructs a new CVPromise with a fresh wait state.
+    */
    CVPromise();
 
    CVPromise(CVPromise const&)                = delete;
@@ -51,31 +66,45 @@ public:
    CVPromise& operator=(CVPromise const&)     = delete;
    CVPromise& operator=(CVPromise&&) noexcept = delete;
 
-   /** @brief Destroys the condition-variable promise.
+   /**
+    * @brief Destroys the condition-variable promise.
     *
     * The destructor rejects the underlying promise with @ref End to wake any
     * pending waiters and prevent coroutines from blocking indefinitely.
     */
    virtual ~CVPromise();
 
-   /** @brief Converts the CVPromise to a WPromise<void>. */
+   /**
+    * @brief Converts the CVPromise to a WPromise<void> for co_await.
+    */
    [[nodiscard]] operator WPromise<void>() const;
 
-   /** @brief Gets a WPromise<void> that resolves when the CVPromise is resolved or rejected.
+   /**
+    * @brief Gets a WPromise<void> that resolves when the CVPromise is resolved or rejected.
     *
-    * @return A WPromise<void> that resolves when the CVPromise is resolved or rejected.
+    * @return A WPromise<void> that resolves when Notify() is called or rejects if
+    *          @ref Reject() or the destructor is called.
     */
    [[nodiscard]] WPromise<void> Wait() const;
 
-   /** @brief Gets the underlying WPromise<void>. */
+   /**
+    * @brief Gets the underlying WPromise<void> for direct inspection or co_await.
+    */
    [[nodiscard]] WPromise<void> operator*() const;
-   /** @brief Gets a pointer to the underlying WPromise<void>. */
-   [[nodiscard]] WPromise<void> const* operator->() const;
 
-   /** @brief Notifies the promise, resolving it if it hasn't been resolved or rejected. */
+   /**
+    * @brief Checks if the promise has been resolved (signaled).
+    */
+   bool Resolved() const;
+   /**
+    * @brief Checks if the promise has been rejected (rejected, or destroyed).
+    */
+   bool Rejected() const;
+
+   /**
+    * @brief Notifies all current waiters (one-shot signal).
+    */
    void Notify();
-   /** @brief Resets the promise, making it reusable. */
-   void Reset();
 
    /** @brief Rejects the promise with a specific exception, rejecting it if it hasn't been resolved
     * or rejected.
@@ -87,13 +116,25 @@ public:
    template <class EXCEPTION, class... ARGS>
       requires(std::is_constructible_v<EXCEPTION, ARGS && ...>)
    void Reject(ARGS&&... args) {
-      auto const reject = [this] constexpr {
-         std::shared_lock lock{mutex_};
+      auto const [reject, old_promise] = [this] {
+         auto [new_promise, new_resolve, new_reject] = Promise<void>::Create();
+
+         std::unique_lock lock{mutex_};
          assert(reject_);
-         return reject_;
+
+         auto old_promise = promise_;
+         auto old_reject  = reject_;
+
+         promise_ = std::move(new_promise);
+         resolve_ = std::move(new_resolve);
+         reject_  = std::move(new_reject);
+
+         return std::make_pair(old_reject, std::move(old_promise));
       }();
 
+      assert(reject);
       reject->template Apply<EXCEPTION>(std::forward<ARGS>(args)...);
+      assert(old_promise.Done());
    }
 
 private:
@@ -103,13 +144,13 @@ private:
     */
    CVPromise(
      std::tuple<
-       std::unique_ptr<WPromise<void>>,
+       WPromise<void>,
        std::shared_ptr<promise::Resolve<void>>,
        std::shared_ptr<promise::Reject>>&& cv
    );
 
    mutable std::shared_mutex               mutex_;
-   std::unique_ptr<WPromise<void>>         promise_;
+   WPromise<void>                          promise_;
    std::shared_ptr<promise::Resolve<void>> resolve_;
    std::shared_ptr<promise::Reject>        reject_;
 };
