@@ -30,8 +30,19 @@ Related skill: `release-note`.
 
 - Do not invent changes; only use evidence from git history.
 - Keep wording concise and factual.
+- Keep wording user-friendly and easy to scan.
 - Use the latest reachable tag by default; only when that latest tag points to `HEAD`, use the immediately previous reachable tag.
 - Prefer tag baseline (`<lastVersion>..HEAD`) over blame/boundary baseline.
+
+## Release Note Format
+
+- The release note must be user-friendly.
+- It must include a `What's Changed` header that summarizes the overall changes in a concise paragraph or short bullet list.
+- It must include a `Highlights` section with the most important user-facing improvements.
+- It must include a `Major Changes` section that groups the main technical and functional changes.
+- It must include a `New APIs` section when pertinent, listing all new and changed methods/functions.
+- If no API surface changed, the `New APIs` section may be omitted.
+- Optional supporting sections (for example, `Fixes`, `Documentation`, `Commits`) may be added after `Highlights` and `Major Changes`.
 
 
 ## Output
