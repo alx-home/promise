@@ -1,6 +1,7 @@
 import os
 
 from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.files import collect_libs, copy, save
 
@@ -15,14 +16,28 @@ class AlxPromiseConan(ConanFile):
     topics = ("cpp", "promise", "async", "alx", "alx-home")
 
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False], "fPIC": [True, False]}
-    default_options = {"shared": False, "fPIC": True}
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False],
+        "memcheck": [True, False],
+        "memcheck_full": [True, False],
+    }
+    default_options = {
+        "shared": False,
+        "fPIC": True,
+        "memcheck": False,
+        "memcheck_full": False,
+    }
 
     exports_sources = "CMakeLists.txt", "include/*", "src/*", "module/*", "LICENSE", "README.md", "test/*"
 
     def config_options(self):
         if self.settings.os == "Windows":
             self.options.rm_safe("fPIC")
+
+    def validate(self):
+        if self.options.memcheck_full and not self.options.memcheck:
+            raise ConanInvalidConfiguration("memcheck_full=True requires memcheck=True")
 
     def requirements(self):
         self.requires("alx-cpp-utils/1.1.0", transitive_headers=True)
@@ -57,7 +72,10 @@ class AlxPromiseConan(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["CMAKE_PROJECT_INCLUDE"] = project_include
         tc.variables["BUILD_SHARED_LIBS"] = self.options.shared
-        tc.variables["PROMISE_BUILD_TESTS"] = True  # Enable tests
+        tc.variables["PROMISE_BUILD_TESTS"] = False
+        tc.variables["PROMISE_MEMCHECK_DEBUG"] = bool(self.options.memcheck)
+        tc.variables["PROMISE_MEMCHECK_RELEASE"] = bool(self.options.memcheck)
+        tc.variables["PROMISE_MEMCHECK_FULL"] = bool(self.options.memcheck_full)
         tc.variables["PROMISE_FETCH_BUILD_TOOLS"] = False
         tc.variables["PROMISE_FETCH_CPP_UTILS"] = False
         tc.generate()
@@ -87,3 +105,9 @@ class AlxPromiseConan(ConanFile):
         self.cpp_info.set_property("cmake_file_name", "alx-promise")
         self.cpp_info.set_property("cmake_target_name", "alx-home::promise")
         self.cpp_info.libs = collect_libs(self)
+
+        if self.options.memcheck:
+            self.cpp_info.defines.append("PROMISE_MEMCHECK")
+
+        if self.options.memcheck_full:
+            self.cpp_info.defines.append("PROMISE_MEMCHECK_FULL")
