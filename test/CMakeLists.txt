@@ -18,6 +18,9 @@ FetchContent_MakeAvailable(Catch2)
 # Test executable
 add_executable(promise_test
    test_promise.cpp
+   test_promise_chains.cpp
+   test_promise_components.cpp
+   test_promise_branches.cpp
 )
 
 target_link_libraries(promise_test PRIVATE
