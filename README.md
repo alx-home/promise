@@ -1,9 +1,23 @@
 <p align="center">
-    <a href="https://github.com/alx-home/promise/actions/workflows/build.yml">
+    <a style="text-decoration: none; display: inline-block;" href="https://github.com/alx-home/promise/actions/workflows/build.yml">
         <img alt="Build" src="https://github.com/alx-home/promise/actions/workflows/build.yml/badge.svg">
     </a>
-    <a href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
         <img alt="Quality Gate Status" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=alert_status&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
+</p>
+<p align="center">
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Coverage" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=coverage&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Duplicated Lines (%)" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=duplicated_lines_density&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Security Hotspots" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=security_hotspots&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Security Issues" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=software_quality_security_issues&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
     </a>
 </p>
 
