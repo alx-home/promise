@@ -1,256 +1,267 @@
 name: Build
 
 on:
-   push:
-      branches:
-         - master
-      tags:
-         - "*"
-   workflow_dispatch:
+  push:
+    branches:
+      - master
+    tags:
+      - "*"
+  workflow_dispatch:
 
 jobs:
-   build:
-      name: Build, test, coverage and analyze
-      runs-on: ubuntu-24.04
+  build:
+    name: Build, test, coverage and analyze
+    runs-on: ubuntu-24.04
 
-      steps:
-         - uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Install build and coverage tools
-           run: |
-              sudo apt-get update
-              sudo apt-get install -y cmake ninja-build gcc-14 g++-14
-              python3 -m pip install --upgrade pip gcovr
+      - name: Install build and coverage tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-14 g++-14
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python3 -m pip install --upgrade pip gcovr
 
-         - name: Configure Debug with coverage
-           run: >-
-              cmake
-              -S .
-              -B build
-              -G Ninja
-              -DCMAKE_C_COMPILER=gcc-14
-              -DCMAKE_CXX_COMPILER=g++-14
-              -DCMAKE_BUILD_TYPE=Debug
-              -DPROMISE_BUILD_TESTS=ON
-              -DCMAKE_CXX_FLAGS="-O0 --coverage -fprofile-arcs -ftest-coverage"
-              -DCMAKE_EXE_LINKER_FLAGS="--coverage"
-              -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
+      - name: Configure Debug with coverage
+        run: >-
+          cmake
+          -S .
+          -B build
+          -G Ninja
+          -DCMAKE_C_COMPILER=gcc-14
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DCMAKE_BUILD_TYPE=Debug
+          -DPROMISE_BUILD_TESTS=ON
+          -DCMAKE_CXX_FLAGS="-O0 --coverage -fprofile-arcs -ftest-coverage"
+          -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+          -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
 
-         - name: Build tests
-           run: cmake --build build --target promise_test --config Debug
+      - name: Build tests
+        run: cmake --build build --target promise_test --config Debug
 
-         - name: Run tests
-           run: ctest --test-dir build --output-on-failure
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
-         - name: Generate SonarQube coverage report
-           run: |
-              mkdir -p coverage
-              gcovr \
-                --root . \
-                --object-directory build \
-                --exclude 'build/CMakeFiles/[0-9]' \
-                --exclude 'build/' \
-                --gcov-executable gcov-14 \
-                --gcov-ignore-errors=all \
-                --sonarqube coverage/sonar-coverage.xml
+      - name: Generate SonarQube coverage report
+        run: |
+          source .venv/bin/activate
+          mkdir -p coverage
+          gcovr \
+            --root . \
+            --object-directory build \
+            --exclude 'build/CMakeFiles/[0-9]' \
+            --exclude 'build/' \
+            --gcov-executable gcov-14 \
+            --gcov-ignore-errors=all \
+            --sonarqube coverage/sonar-coverage.xml
 
-         - name: Upload coverage artifact
-           uses: actions/upload-artifact@v4
-           with:
-              name: promise-sonarqube-coverage
-              path: coverage/sonar-coverage.xml
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-sonarqube-coverage
+          path: coverage/sonar-coverage.xml
 
-         - name: Decode certificate
-           run: |
-              echo ${SONAR_CERT} | base64 -d > /tmp/certs.p12
-           env:
-              SONAR_CERT: ${{ secrets.SONAR_CERT }}
+      - name: Decode certificate
+        if: ${{ !env.ACT }}
+        run: |
+          echo ${SONAR_CERT} | base64 -d > /tmp/certs.p12
+        env:
+          SONAR_CERT: ${{ secrets.SONAR_CERT }}
 
-         - name: SonarQube Scan
-           uses: SonarSource/sonarqube-scan-action@v6
-           env:
-              SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-              SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-              SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
+      - name: Patch sonar-project.properties for act
+        if: ${{ env.ACT }}
+        run: |
+          sed -i '/^sonar\.clientcert/d' sonar-project.properties
+          sed -i '/^sonar\.scanner\.key/d' sonar-project.properties
+          echo "sonar.scm.disabled=true" >> sonar-project.properties
 
-   linux-release-gcc:
-      name: Linux Release with gcc-14
-      runs-on: ubuntu-24.04
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_CERT_PWD: ${{ secrets.SONAR_CERT_PWD }}
 
-      steps:
-         - uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+  linux-release-gcc:
+    name: Linux Release with gcc-14
+    runs-on: ubuntu-24.04
 
-         - name: Install build tools
-           run: |
-              sudo apt-get update
-              sudo apt-get install -y cmake ninja-build gcc-14 g++-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Configure Release
-           run: >-
-              cmake
-              -S .
-              -B build-release
-              -G Ninja
-              -DCMAKE_C_COMPILER=gcc-14
-              -DCMAKE_CXX_COMPILER=g++-14
-              -DCMAKE_BUILD_TYPE=Release
-              -DPROMISE_BUILD_TESTS=OFF
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-14 g++-14
 
-         - name: Build release library
-           run: cmake --build build-release --target alx-home_promise --config Release
+      - name: Configure Release
+        run: >-
+          cmake
+          -S .
+          -B build-release
+          -G Ninja
+          -DCMAKE_C_COMPILER=gcc-14
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DCMAKE_BUILD_TYPE=Release
+          -DPROMISE_BUILD_TESTS=OFF
 
-         - name: Collect release library artifacts
-           run: |
-              mkdir -p release-artifacts
-              find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
-                cp "$lib" release-artifacts/
-              done
-              test -n "$(ls -A release-artifacts)"
+      - name: Build release library
+        run: cmake --build build-release --target alx-home_promise --config Release
 
-         - name: Upload release library artifacts
-           uses: actions/upload-artifact@v4
-           with:
-              name: promise-release-linux-gcc-${{ github.ref_name }}
-              path: release-artifacts/
+      - name: Collect release library artifacts
+        run: |
+          mkdir -p release-artifacts
+          find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
+            cp "$lib" release-artifacts/
+          done
+          test -n "$(ls -A release-artifacts)"
 
-   linux-release-clang:
-      name: Linux Release with clang
-      runs-on: ubuntu-24.04
+      - name: Upload release library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-release-linux-gcc-${{ github.ref_name }}
+          path: release-artifacts/
 
-      steps:
-         - uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+  linux-release-clang:
+    name: Linux Release with clang
+    runs-on: ubuntu-24.04
 
-         - name: Install build tools
-           run: |
-              sudo apt-get update
-              sudo apt-get install -y cmake ninja-build clang
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Configure Release
-           run: >-
-              cmake
-              -S .
-              -B build-release
-              -G Ninja
-              -DCMAKE_C_COMPILER=clang
-              -DCMAKE_CXX_COMPILER=clang++
-              -DCMAKE_BUILD_TYPE=Release
-              -DPROMISE_BUILD_TESTS=OFF
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang
 
-         - name: Build release library
-           run: cmake --build build-release --target alx-home_promise --config Release
+      - name: Configure Release
+        run: >-
+          cmake
+          -S .
+          -B build-release
+          -G Ninja
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_BUILD_TYPE=Release
+          -DPROMISE_BUILD_TESTS=OFF
 
-         - name: Collect release library artifacts
-           run: |
-              mkdir -p release-artifacts
-              find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
-                cp "$lib" release-artifacts/
-              done
-              test -n "$(ls -A release-artifacts)"
+      - name: Build release library
+        run: cmake --build build-release --target alx-home_promise --config Release
 
-         - name: Upload release library artifacts
-           uses: actions/upload-artifact@v4
-           with:
-              name: promise-release-linux-clang-${{ github.ref_name }}
-              path: release-artifacts/
+      - name: Collect release library artifacts
+        run: |
+          mkdir -p release-artifacts
+          find build-release -type f \( -name "*.a" -o -name "*.so" -o -name "*.dylib" \) -print0 | while IFS= read -r -d '' lib; do
+            cp "$lib" release-artifacts/
+          done
+          test -n "$(ls -A release-artifacts)"
 
-   windows-release-clang-cl:
-      name: Windows Release with clang-cl
-      runs-on: windows-latest
+      - name: Upload release library artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-release-linux-clang-${{ github.ref_name }}
+          path: release-artifacts/
 
-      steps:
-         - uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+  windows-release-clang-cl:
+    name: Windows Release with clang-cl
+    runs-on: windows-latest
 
-         - name: Install Ninja and LLVM
-           run: |
-              choco install -y ninja
-              choco install -y llvm
-           shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Verify clang-cl
-           run: clang-cl --version
+      - name: Install Ninja and LLVM
+        run: |
+          choco install -y ninja
+          choco install -y llvm
+        shell: powershell
 
-         - name: Configure Windows Release with clang-cl
-           run: |
-              cmake -S . -B build-windows -G Ninja ^
-                -DCMAKE_C_COMPILER=clang-cl ^
-                -DCMAKE_CXX_COMPILER=clang-cl ^
-                -DCMAKE_BUILD_TYPE=Release ^
-                -DPROMISE_BUILD_TESTS=OFF
-           shell: cmd
+      - name: Verify clang-cl
+        run: clang-cl --version
 
-         - name: Build Windows release library
-           run: cmake --build build-windows --config Release --target alx-home_promise
-           shell: cmd
+      - name: Configure Windows Release with clang-cl
+        run: |
+          cmake -S . -B build-windows -G Ninja ^
+            -DCMAKE_C_COMPILER=clang-cl ^
+            -DCMAKE_CXX_COMPILER=clang-cl ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DPROMISE_BUILD_TESTS=OFF
+        shell: cmd
 
-         - name: Collect Windows release artifacts
-           run: |
-              mkdir -p release-artifacts-windows
-              for /r build-windows %%f in (*.lib *.dll *.a *.so) do copy "%%f" release-artifacts-windows\
-              if not exist release-artifacts-windows\ ( exit 1 )
-           shell: cmd
+      - name: Build Windows release library
+        run: cmake --build build-windows --config Release --target alx-home_promise
+        shell: cmd
 
-         - name: Upload Windows release artifacts
-           uses: actions/upload-artifact@v4
-           with:
-              name: promise-release-windows-clang-cl-${{ github.ref_name }}
-              path: release-artifacts-windows/
+      - name: Collect Windows release artifacts
+        run: |
+          mkdir -p release-artifacts-windows
+          for /r build-windows %%f in (*.lib *.dll *.a *.so) do copy "%%f" release-artifacts-windows\
+          if not exist release-artifacts-windows\ ( exit 1 )
+        shell: cmd
 
-   windows-release-msvc:
-      name: Windows Release with cl.exe (MSVC)
-      runs-on: windows-latest
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-release-windows-clang-cl-${{ github.ref_name }}
+          path: release-artifacts-windows/
 
-      steps:
-         - uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+  windows-release-msvc:
+    name: Windows Release with cl.exe (MSVC)
+    runs-on: windows-latest
 
-         - name: Install Ninja
-           run: choco install -y ninja
-           shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Configure Windows Release with cl.exe (Ninja + MSVC)
-           shell: cmd
-           run: |
-              rem find Visual Studio installation path
-              for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
-              if not defined VSINSTALL (
-                echo Visual Studio not found
-                exit /b 1
-              )
-              rem initialize MSVC environment for x64
-              call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
-              rem configure with Ninja using MSVC toolchain
-              cmake -S . -B build-msvc -G "Ninja" ^
-                -DCMAKE_C_COMPILER=cl.exe ^
-                -DCMAKE_CXX_COMPILER=cl.exe ^
-                -DCMAKE_BUILD_TYPE=Release ^
-                -DPROMISE_BUILD_TESTS=OFF
+      - name: Install Ninja
+        run: choco install -y ninja
+        shell: powershell
 
-         - name: Build Windows release library
-           shell: cmd
-           run: |
-              rem locate Visual Studio again (same as above)
-              for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
-              call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
-              cmake --build build-msvc --config Release --target alx-home_promise
+      - name: Configure Windows Release with cl.exe (Ninja + MSVC)
+        shell: cmd
+        run: |
+          rem find Visual Studio installation path
+          for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio not found
+            exit /b 1
+          )
+          rem initialize MSVC environment for x64
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          rem configure with Ninja using MSVC toolchain
+          cmake -S . -B build-msvc -G "Ninja" ^
+            -DCMAKE_C_COMPILER=cl.exe ^
+            -DCMAKE_CXX_COMPILER=cl.exe ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DPROMISE_BUILD_TESTS=OFF
 
-         - name: Collect Windows release artifacts
-           run: |
-              mkdir -p release-artifacts-msvc
-              for /r build-msvc %%f in (*.lib *.dll *.a *.so) do copy "%%f" release-artifacts-msvc\
-              if not exist release-artifacts-msvc\ ( exit 1 )
-           shell: cmd
+      - name: Build Windows release library
+        shell: cmd
+        run: |
+          rem locate Visual Studio again (same as above)
+          for /f "usebackq delims=" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake --build build-msvc --config Release --target alx-home_promise
 
-         - name: Upload Windows release artifacts
-           uses: actions/upload-artifact@v4
-           with:
-              name: promise-release-windows-msvc-${{ github.ref_name }}
-              path: release-artifacts-msvc/
+      - name: Collect Windows release artifacts
+        run: |
+          mkdir -p release-artifacts-msvc
+          for /r build-msvc %%f in (*.lib *.dll *.a *.so) do copy "%%f" release-artifacts-msvc\
+          if not exist release-artifacts-msvc\ ( exit 1 )
+        shell: cmd
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-release-windows-msvc-${{ github.ref_name }}
+          path: release-artifacts-msvc/
