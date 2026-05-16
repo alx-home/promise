@@ -19,6 +19,9 @@
     <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
         <img alt="Security Issues" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=software_quality_security_issues&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
     </a>
+    <a style="text-decoration: none; display: inline-block;" href="https://sonarqube.alex-home.fr/dashboard?id=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce">
+        <img alt="Reliability Rating" src="https://sonarqube.alex-home.fr/api/project_badges/measure?project=alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce&metric=software_quality_reliability_rating&token=sqb_9fa9f23299ff58970210cbc2e5dc06ee9da6dc09">
+    </a>
 </p>
 
 <p align="center">
