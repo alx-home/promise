@@ -135,8 +135,14 @@ void
 StatePromise::Done() {
    assert(done_resolve_);
 
+   auto const ready_was_done = ready_promise_.Done();
+   // Resolve done before ready for WaitWithReject() to reject with End() instead of resolving with
+   // void.
    (*done_resolve_)();
-   (*ready_resolve_)();
+
+   if (!ready_was_done) {
+      (*ready_resolve_)();
+   }
 }
 
 /** @brief Reports whether both internal promises reached the done state.
