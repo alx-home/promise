@@ -135,6 +135,8 @@ target_link_libraries(your_target PRIVATE alx-home::promise)
 
 You can also install this library with `vcpkg`.
 
+The custom registry used for this package is `github.com/alx-home/vcpkg-registry`.
+
 Then configure your project with vcpkg's toolchain:
 
 ```powershell
