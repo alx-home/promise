@@ -21,6 +21,7 @@ add_executable(promise_test
    test_promise_chains.cpp
    test_promise_components.cpp
    test_promise_branches.cpp
+   test_promise_rvalue_and_resolver.cpp
 )
 
 target_link_libraries(promise_test PRIVATE

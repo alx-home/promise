@@ -25,8 +25,8 @@ TEST_CASE("CVPromise notifies, rejects, and destructor behavior", "[promise]") {
    REQUIRE(waiter.Done());
    REQUIRE(caught);
 
-   bool end_caught = false;
-   auto temp_cv    = std::make_unique<CVPromise>();
+   bool     end_caught = false;
+   auto     temp_cv    = std::make_unique<CVPromise>();
    WPromise waiter2{[&]() -> Promise<void> {
       try {
          co_await temp_cv->Wait();
@@ -85,8 +85,8 @@ TEST_CASE("StatePromise tracks ready, done, and reject transitions", "[promise]"
    REQUIRE(wait_with_reject2.Rejected());
    RequireException<StatePromise::End>(wait_with_reject2.Exception());
 
-   bool end_caught_state = false;
-   auto temp_state       = std::make_unique<StatePromise>();
+   bool     end_caught_state = false;
+   auto     temp_state       = std::make_unique<StatePromise>();
    WPromise waiter_state{[&]() -> Promise<void> {
       try {
          co_await temp_state->WaitDoneWithReject();
