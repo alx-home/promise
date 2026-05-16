@@ -7,7 +7,7 @@ from conan.tools.files import collect_libs, copy, save
 
 class AlxPromiseConan(ConanFile):
     name = "alx-promise"
-    version = "1.6.0"
+    version = "1.6.2"
     license = "MIT"
     author = "alx-home"
     url = "https://github.com/alx-home/promise"
@@ -25,7 +25,7 @@ class AlxPromiseConan(ConanFile):
             self.options.rm_safe("fPIC")
 
     def requirements(self):
-        self.requires("alx-cpp-utils/1.1.0")
+        self.requires("alx-cpp-utils/1.1.0", transitive_headers=True)
 
     def build_requirements(self):
         self.tool_requires("alx-build-tools/1.1.0")
@@ -57,7 +57,7 @@ class AlxPromiseConan(ConanFile):
         tc = CMakeToolchain(self)
         tc.variables["CMAKE_PROJECT_INCLUDE"] = project_include
         tc.variables["BUILD_SHARED_LIBS"] = self.options.shared
-        tc.variables["PROMISE_BUILD_TESTS"] = False
+        tc.variables["PROMISE_BUILD_TESTS"] = True  # Enable tests
         tc.variables["PROMISE_FETCH_BUILD_TOOLS"] = False
         tc.variables["PROMISE_FETCH_CPP_UTILS"] = False
         tc.generate()
@@ -66,6 +66,9 @@ class AlxPromiseConan(ConanFile):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
+        
+        # Run tests after build
+        cmake.test()
 
     def package(self):
         copy(self, "*.h", src=os.path.join(self.source_folder, "include"), dst=os.path.join(self.package_folder, "include"))
@@ -84,4 +87,3 @@ class AlxPromiseConan(ConanFile):
         self.cpp_info.set_property("cmake_file_name", "alx-promise")
         self.cpp_info.set_property("cmake_target_name", "alx-home::promise")
         self.cpp_info.libs = collect_libs(self)
-        self.cpp_info.requires = ["alx-cpp-utils::alx-cpp-utils"]
