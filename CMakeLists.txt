@@ -19,7 +19,7 @@ option(PROMISE_FETCH_CPP_UTILS "Fetch cpp_utils when alx-home::cpp_utils is unav
 set(PROMISE_BUILD_TOOLS_GIT_REPOSITORY "https://github.com/alx-home/build_tools.git" CACHE STRING "Git repository used to fetch build_tools")
 set(PROMISE_BUILD_TOOLS_GIT_TAG "release" CACHE STRING "Git tag or branch used to fetch build_tools")
 set(PROMISE_CPP_UTILS_GIT_REPOSITORY "https://github.com/alx-home/cpp_utils.git" CACHE STRING "Git repository used to fetch cpp_utils")
-set(PROMISE_CPP_UTILS_GIT_TAG "release" CACHE STRING "Git tag or branch used to fetch cpp_utils")
+set(PROMISE_CPP_UTILS_GIT_TAG "2de0a62a8165439114a8d676182233281b5e4f24" CACHE STRING "Git tag or branch used to fetch cpp_utils")
 
 if(NOT COMMAND win32_library OR NOT COMMAND win32_executable)
   if(NOT PROMISE_FETCH_BUILD_TOOLS)
