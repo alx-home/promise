@@ -64,15 +64,21 @@ public:
      std::optional<typename Pool::time_point> until = std::nullopt
    ) const noexcept {
       auto [promise, resolve, reject] = Promise<void>::Create();
-      if (!::Pool<false, SIZE>::Dispatch(
-            [resolve = std::move(resolve), promise]() mutable {
-               // Wait until the promise is actually awaited before resolving, to ensure the caller
-               // is called from within this thread.
-               promise.WaitAwaited(0);
-               (*resolve)();
-            },
-            until
-          )) {
+      if (
+        auto [dispatched, func] = ::Pool<false, SIZE>::Dispatch(
+          [resolve = std::move(resolve), promise]() mutable {
+             // Wait until the promise is actually awaited before resolving, to ensure the caller
+             // is called from within this thread.
+             promise.WaitAwaited(0);
+             (*resolve)();
+          },
+          until
+        );
+        !dispatched
+      ) {
+         // Keep func alive until here to ensure the promise is rejected if the queue is stopped
+         // before deletion.
+         (void)func;
          reject->template Apply<QueueStopped>(this->GetName());
       }
 
@@ -107,21 +113,27 @@ public:
      std::optional<typename Pool::time_point> until = std::nullopt
    ) const noexcept {
       auto [promise, resolve, reject] = Promise<RETURN>::Create();
-      if (!::Pool<false, SIZE>::Dispatch(
-            [resolve = std::move(resolve), reject, func = std::move(func)]() mutable {
-               try {
-                  if constexpr (std::is_void_v<RETURN>) {
-                     func();
-                     (*resolve)();
-                  } else {
-                     (*resolve)(func());
-                  }
-               } catch (...) {
-                  (*reject)(std::current_exception());
-               }
-            },
-            until
-          )) {
+      if (
+        auto [dispatched, func2] = ::Pool<false, SIZE>::Dispatch(
+          [resolve = std::move(resolve), reject, func = std::move(func)]() mutable {
+             try {
+                if constexpr (std::is_void_v<RETURN>) {
+                   func();
+                   (*resolve)();
+                } else {
+                   (*resolve)(func());
+                }
+             } catch (...) {
+                (*reject)(std::current_exception());
+             }
+          },
+          until
+        );
+        !dispatched
+      ) {
+         // Keep func alive until here to ensure the promise is rejected if the queue is stopped
+         // before deletion.
+         (void)func2;
          reject->template Apply<QueueStopped>(this->GetName());
       }
 
@@ -144,16 +156,22 @@ public:
      std::optional<typename Pool::time_point>                     until = std::nullopt
    ) const noexcept {
       auto [promise, resolve, reject] = Promise<RETURN>::Create();
-      if (!::Pool<false, SIZE>::Dispatch(
-            [resolve = std::move(resolve), reject, func = std::move(func)]() {
-               try {
-                  func(*resolve, *reject);
-               } catch (...) {
-                  (*reject)(std::current_exception());
-               }
-            },
-            until
-          )) {
+      if (
+        auto [dispatched, func2] = ::Pool<false, SIZE>::Dispatch(
+          [resolve = std::move(resolve), reject, func = std::move(func)]() {
+             try {
+                func(*resolve, *reject);
+             } catch (...) {
+                (*reject)(std::current_exception());
+             }
+          },
+          until
+        );
+        !dispatched
+      ) {
+         // Keep func alive until here to ensure the promise is rejected if the queue is stopped
+         // before deletion.
+         (void)func2;
          reject->template Apply<QueueStopped>(this->GetName());
       }
 
