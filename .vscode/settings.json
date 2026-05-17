@@ -60,5 +60,9 @@
             }
          }
       }
-   ]
+   ],
+   "coverage-gutters.coverageFileNames": [
+      "artifacts/1/promise-sonarqube-coverage/coverage.xml"
+   ],
+   "coverage-gutters.showGutterCoverage": true
 }
