@@ -1,0 +1,19 @@
+{
+   "version": "2.0.0",
+   "tasks": [
+      {
+         "label": "Run act build analysis",
+         "type": "shell",
+         "command": "act",
+         "args": [
+            "push",
+            "-P",
+            "ubuntu-24.04=catthehacker/ubuntu:act-latest",
+            "-j",
+            "build"
+         ],
+         "isBackground": false,
+         "group": "build"
+      }
+   ]
+}

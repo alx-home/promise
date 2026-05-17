@@ -1,6 +1,6 @@
 #include "TestCommon.h"
 
-TEST_CASE("Promise resolves with value", "[promise]") {
+TEST_CASE("Promise resolves with value", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(42);
 
    REQUIRE(p.Done());
@@ -9,7 +9,7 @@ TEST_CASE("Promise resolves with value", "[promise]") {
    REQUIRE(p.Value() == 42);
 }
 
-TEST_CASE("Promise resolves with void", "[promise]") {
+TEST_CASE("Promise resolves with void", "[Promise][Core]") {
    auto p = Promise<void>::Resolve();
 
    REQUIRE(p.Done());
@@ -17,7 +17,7 @@ TEST_CASE("Promise resolves with void", "[promise]") {
    REQUIRE_FALSE(p.Rejected());
 }
 
-TEST_CASE("Promise rejects with exception", "[promise]") {
+TEST_CASE("Promise rejects with exception", "[Promise][Core]") {
    auto p = Promise<int>::Reject<TestError>("boom");
 
    REQUIRE(p.Done());
@@ -26,21 +26,21 @@ TEST_CASE("Promise rejects with exception", "[promise]") {
    RequireException<TestError>(p.Exception());
 }
 
-TEST_CASE("Then transforms a resolved value", "[promise]") {
+TEST_CASE("Then transforms a resolved value", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(21).Then([](int value) { return value * 2; });
 
    REQUIRE(p.Resolved());
    REQUIRE(p.Value() == 42);
 }
 
-TEST_CASE("Then can chain coroutine promises", "[promise]") {
+TEST_CASE("Then can chain coroutine promises", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(21).Then([](int value) -> Promise<int> { co_return value * 2; });
 
    REQUIRE(p.Resolved());
    REQUIRE(p.Value() == 42);
 }
 
-TEST_CASE("Catch recovers from rejection", "[promise]") {
+TEST_CASE("Catch recovers from rejection", "[Promise][Core]") {
    auto p =
      Promise<int>::Reject<TestError>("boom").Catch([](std::exception_ptr const&) { return 42; });
 
@@ -48,7 +48,7 @@ TEST_CASE("Catch recovers from rejection", "[promise]") {
    REQUIRE(p.Value() == 42);
 }
 
-TEST_CASE("Catch preserves exception when rethrowing", "[promise]") {
+TEST_CASE("Catch preserves exception when rethrowing", "[Promise][Core]") {
    auto p = Promise<int>::Reject<TestError>("boom").Catch([](std::exception_ptr exception) -> int {
       std::rethrow_exception(exception);
    });
@@ -57,7 +57,7 @@ TEST_CASE("Catch preserves exception when rethrowing", "[promise]") {
    RequireException<TestError>(p.Exception());
 }
 
-TEST_CASE("Then Catch Then passes through when no exception is raised", "[promise]") {
+TEST_CASE("Then Catch Then passes through when no exception is raised", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(4).Then(
                                       [](int value) { return value + 1; }
    ).Catch([](std::exception_ptr const&) {
@@ -68,7 +68,7 @@ TEST_CASE("Then Catch Then passes through when no exception is raised", "[promis
    REQUIRE(p.Value() == 10);
 }
 
-TEST_CASE("Then Catch Then recovers when the first Then throws", "[promise]") {
+TEST_CASE("Then Catch Then recovers when the first Then throws", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(4)
               .Then([](int) -> int { throw TestError("then failed"); })
               .Catch([](TestError const& exception) {
@@ -81,7 +81,7 @@ TEST_CASE("Then Catch Then recovers when the first Then throws", "[promise]") {
    REQUIRE(p.Value() == 21);
 }
 
-TEST_CASE("Then Catch Then stays rejected when Catch rethrows", "[promise]") {
+TEST_CASE("Then Catch Then stays rejected when Catch rethrows", "[Promise][Core]") {
    auto p = Promise<int>::Resolve(4).Then(
                                       [](int) -> int { throw TestError("then failed"); }
    ).Catch([](std::exception_ptr exception) -> int {
@@ -92,7 +92,7 @@ TEST_CASE("Then Catch Then stays rejected when Catch rethrows", "[promise]") {
    RequireException<TestError>(p.Exception());
 }
 
-TEST_CASE("Then Catch Then stays rejected when Catch throws a new exception", "[promise]") {
+TEST_CASE("Then Catch Then stays rejected when Catch throws a new exception", "[Promise][Core]") {
    auto p = Promise<int>::Reject<TestError>("initial failure")
               .Then([](int value) { return value + 1; })
               .Catch([](TestError const& exception) -> int {
@@ -105,7 +105,7 @@ TEST_CASE("Then Catch Then stays rejected when Catch throws a new exception", "[
    RequireException<CatchError>(p.Exception());
 }
 
-TEST_CASE("Then Catch Then stays rejected when the final Then throws", "[promise]") {
+TEST_CASE("Then Catch Then stays rejected when the final Then throws", "[Promise]") {
    auto p = Promise<int>::Reject<TestError>("initial failure")
               .Then([](int value) { return value + 1; })
               .Catch([](TestError const& exception) {
@@ -118,7 +118,7 @@ TEST_CASE("Then Catch Then stays rejected when the final Then throws", "[promise
    RequireException<FinalThenError>(p.Exception());
 }
 
-TEST_CASE("Async catch-through chain preserves old promise_test behavior", "[promise]") {
+TEST_CASE("Async catch-through chain preserves old promise_test behavior", "[Promise]") {
    auto p = WPromise{[]() -> Promise<int> { co_return 0; }}
               .Then([](int value) -> Promise<int> { co_return value + 3; })
               .Catch([](std::exception_ptr) -> Promise<void> { co_return; })
@@ -135,7 +135,7 @@ TEST_CASE("Async catch-through chain preserves old promise_test behavior", "[pro
    REQUIRE(p.Value() == 800);
 }
 
-TEST_CASE("Sync catch-through chain preserves old promise_test behavior", "[promise]") {
+TEST_CASE("Sync catch-through chain preserves old promise_test behavior", "[Promise]") {
    auto p = WPromise{[]() -> Promise<int> { co_return 0; }}
               .Then([](int value) { return value + 3; })
               .Catch([](std::exception_ptr) {})
@@ -152,7 +152,7 @@ TEST_CASE("Sync catch-through chain preserves old promise_test behavior", "[prom
    REQUIRE(p.Value() == 800);
 }
 
-TEST_CASE("Complex Then Catch Finally chain matches old promise_test flow", "[promise]") {
+TEST_CASE("Complex Then Catch Finally chain matches old promise_test flow", "[Promise]") {
    auto p = Promise<int>::Resolve(6)
               .Then([](int value) -> Promise<double> {
                  throw TestError("test");
@@ -179,7 +179,7 @@ TEST_CASE("Complex Then Catch Finally chain matches old promise_test flow", "[pr
    REQUIRE(p.Value() == 303);
 }
 
-TEST_CASE("Finally runs on resolved promise", "[promise]") {
+TEST_CASE("Finally runs on resolved promise", "[Promise]") {
    bool cleanup_ran = false;
 
    auto p = Promise<int>::Resolve(7).Finally([&cleanup_ran]() { cleanup_ran = true; });
@@ -189,7 +189,7 @@ TEST_CASE("Finally runs on resolved promise", "[promise]") {
    REQUIRE(cleanup_ran);
 }
 
-TEST_CASE("Finally runs on rejected promise", "[promise]") {
+TEST_CASE("Finally runs on rejected promise", "[Promise]") {
    bool cleanup_ran = false;
 
    auto p =
@@ -200,7 +200,7 @@ TEST_CASE("Finally runs on rejected promise", "[promise]") {
    RequireException<TestError>(p.Exception());
 }
 
-TEST_CASE("promise::Create resolves externally", "[promise]") {
+TEST_CASE("promise::Create resolves externally", "[Promise]") {
    auto [p, resolve, reject] = promise::Create<int>();
 
    REQUIRE_FALSE(p.Done());
@@ -212,7 +212,7 @@ TEST_CASE("promise::Create resolves externally", "[promise]") {
    REQUIRE(p.Value() == 99);
 }
 
-TEST_CASE("promise::Create rejects externally", "[promise]") {
+TEST_CASE("promise::Create rejects externally", "[Promise]") {
    auto [p, resolve, reject] = promise::Create<int>();
 
    REQUIRE_FALSE(p.Done());
@@ -222,7 +222,7 @@ TEST_CASE("promise::Create rejects externally", "[promise]") {
    RequireException<TestError>(p.Exception());
 }
 
-TEST_CASE("MakePromise wraps synchronous and coroutine callables", "[promise]") {
+TEST_CASE("MakePromise wraps synchronous and coroutine callables", "[Promise]") {
    auto sync      = MakePromise([] { return 12; });
    auto coroutine = MakePromise([]() -> Promise<int> { co_return 30; });
 
@@ -232,7 +232,7 @@ TEST_CASE("MakePromise wraps synchronous and coroutine callables", "[promise]") 
    REQUIRE(coroutine.Value() == 30);
 }
 
-TEST_CASE("Direct coroutine promises resolve", "[promise]") {
+TEST_CASE("Direct coroutine promises resolve", "[Promise]") {
    auto p = MakePromise(CoroutineValue, 15);
    auto v = MakePromise(CoroutineVoid);
 

@@ -90,14 +90,14 @@ endif()
 if(PROMISE_MEMCHECK)
   target_compile_definitions(alx-home_promise PUBLIC PROMISE_MEMCHECK)
 
-  if(PROMISE_BUILD_TESTS)
+  if(TARGET promise_test)
     target_compile_definitions(promise_test PUBLIC PROMISE_MEMCHECK)
   endif()
 
   if(PROMISE_MEMCHECK_FULL)
     target_compile_definitions(alx-home_promise PUBLIC PROMISE_MEMCHECK_FULL)
 
-    if(PROMISE_BUILD_TESTS)
+    if(TARGET promise_test)
       target_compile_definitions(promise_test PUBLIC PROMISE_MEMCHECK_FULL)
     endif()
   endif(PROMISE_MEMCHECK_FULL)

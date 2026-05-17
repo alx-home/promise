@@ -1,6 +1,9 @@
 #include "TestCommon.h"
 
-TEST_CASE("Catch pass-through preserves resolved values across return kinds", "[promise]") {
+TEST_CASE(
+  "Catch pass-through preserves resolved values across return kinds",
+  "[Promise][Branches]"
+) {
    auto resolved_int_with_void_catch = Promise<int>::Resolve(33).Catch([](TestError const&) {});
 
    REQUIRE(resolved_int_with_void_catch.Resolved());
@@ -19,7 +22,10 @@ TEST_CASE("Catch pass-through preserves resolved values across return kinds", "[
    REQUIRE_FALSE(resolved_void_with_value_catch.Value().has_value());
 }
 
-TEST_CASE("Catch async typed exception keeps exception alive across suspension", "[promise]") {
+TEST_CASE(
+  "Catch async typed exception keeps exception alive across suspension",
+  "[Promise][Branches]"
+) {
    auto [gate, resolve, reject] = promise::Create<void>();
 
    auto recovered = Promise<int>::Reject<TestError>("typed async")
@@ -40,7 +46,10 @@ TEST_CASE("Catch async typed exception keeps exception alive across suspension",
    REQUIRE(recovered.Value() == "typed async");
 }
 
-TEST_CASE("Catch with exception_ptr async recovery resolves expected value", "[promise]") {
+TEST_CASE(
+  "Catch with exception_ptr async recovery resolves expected value",
+  "[Promise][Branches]"
+) {
    auto recovered = Promise<int>::Reject<TestError>("ptr async")
                       .Catch([](std::exception_ptr exception) -> Promise<int> {
                          RequireException<TestError>(exception);
@@ -51,7 +60,7 @@ TEST_CASE("Catch with exception_ptr async recovery resolves expected value", "[p
    REQUIRE(recovered.Value() == 909);
 }
 
-TEST_CASE("Finally async failure overrides previous rejection", "[promise]") {
+TEST_CASE("Finally async failure overrides previous rejection", "[Promise][Branches]") {
    auto p = Promise<int>::Reject<TestError>("initial").Finally([]() -> Promise<void> {
       throw FinallyError("finally async fail");
       co_return;

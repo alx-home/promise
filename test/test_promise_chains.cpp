@@ -1,6 +1,6 @@
 #include "TestCommon.h"
 
-TEST_CASE("co_await propagates promise exceptions like the old driver", "[promise]") {
+TEST_CASE("co_await propagates promise exceptions like the old driver", "[Promise][Chains]") {
    auto p = WPromise{[]() -> Promise<std::string> {
       try {
          co_await WPromise{[]() -> Promise<void> {
@@ -18,7 +18,10 @@ TEST_CASE("co_await propagates promise exceptions like the old driver", "[promis
    REQUIRE(p.Value() == "TEST_EXCEPTION");
 }
 
-TEST_CASE("Direct WPromise constructors cover resolve reject and throw paths", "[promise]") {
+TEST_CASE(
+  "Direct WPromise constructors cover resolve reject and throw paths",
+  "[Promise][Chains]"
+) {
    WPromise resolved{[] { return 42; }};
    WPromise resolved_with_resolver{[](Resolve<int> const& resolve) { REQUIRE(resolve(42)); }};
 
@@ -58,7 +61,7 @@ TEST_CASE("Direct WPromise constructors cover resolve reject and throw paths", "
 
 TEST_CASE(
   "Resolver-style WPromise can be resolved after dependent chains are created",
-  "[promise]"
+  "[Promise][Chains]"
 ) {
    std::shared_ptr<Resolve<int> const> resolver;
    std::shared_ptr<Reject const>       rejecter;
@@ -84,7 +87,10 @@ TEST_CASE(
    REQUIRE(prom2.Value() == 6);
 }
 
-TEST_CASE("Then supports resolver-based continuations across value and void", "[promise]") {
+TEST_CASE(
+  "Then supports resolver-based continuations across value and void",
+  "[Resolver][Chains]"
+) {
    auto p =
      WPromise{[]() -> Promise<int> { co_return 999; }}
        .Then([](int value) -> Promise<void> {
@@ -107,7 +113,7 @@ TEST_CASE("Then supports resolver-based continuations across value and void", "[
    REQUIRE(p.Value() == 888);
 }
 
-TEST_CASE("Asynchronous Catch can await another promise before recovering", "[promise]") {
+TEST_CASE("Asynchronous Catch can await another promise before recovering", "[Promise][Chains]") {
    auto [gate, resolve, reject] = promise::Create<void>();
 
    auto p = WPromise{[]() -> Promise<void> {
@@ -130,7 +136,7 @@ TEST_CASE("Asynchronous Catch can await another promise before recovering", "[pr
    REQUIRE(p.Value() == "test async");
 }
 
-TEST_CASE("All combines non-void results and skips void", "[promise]") {
+TEST_CASE("All combines non-void results and skips void", "[Promise][Chains]") {
    auto all = promise::All(
      Promise<int>::Resolve(4),
      Promise<void>::Resolve(),
@@ -144,14 +150,14 @@ TEST_CASE("All combines non-void results and skips void", "[promise]") {
    REQUIRE(text == "ok");
 }
 
-TEST_CASE("All rejects when any member rejects", "[promise]") {
+TEST_CASE("All rejects when any member rejects", "[Promise][Chains]") {
    auto all = promise::All(Promise<int>::Resolve(4), Promise<int>::Reject<TestError>("boom"));
 
    REQUIRE(all.Rejected());
    RequireException<TestError>(all.Exception());
 }
 
-TEST_CASE("Race returns the first resolved alternative", "[promise]") {
+TEST_CASE("Race returns the first resolved alternative", "[Promise]") {
    auto [pending, resolve, reject] = promise::Create<std::string>();
    auto raced                      = promise::Race(Promise<int>::Resolve(7), pending);
 
@@ -163,7 +169,7 @@ TEST_CASE("Race returns the first resolved alternative", "[promise]") {
    REQUIRE_FALSE((*reject)(std::make_exception_ptr(TestError{"ignored"})));
 }
 
-TEST_CASE("Race rejection flows through Catch into optional variant", "[promise]") {
+TEST_CASE("Race rejection flows through Catch into optional variant", "[Promise]") {
    auto [delay, resolve, reject] = promise::Create<void>();
 
    auto raced = promise::Race(

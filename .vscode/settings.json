@@ -3,5 +3,62 @@
       "connectionId": "https-sonarqube-alex-home-fr",
       "projectKey": "alx-home_promise_4d0d1d2f-bd15-4ba9-8b0e-1b25f4b783ce"
    },
-   "sonarlint.pathToCompileCommands": "${workspaceFolder}\\build\\compile_commands.json"
+   "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+   "testMate.cpp.debug.configTemplate": {
+      "type": "cppvsdbg",
+      "linux": {
+         "type": "cppdbg",
+         "MIMode": "gdb"
+      },
+      "darwin": {
+         "type": "cppdbg",
+         "MIMode": "lldb"
+      },
+      "win32": {
+         "type": "cppvsdbg"
+      },
+      "program": "${exec}",
+      "args": "${argsArray}",
+      "cwd": "${cwd}",
+      "env": "${envObj}",
+      "environment": "${envObjArray}",
+      "sourceFileMap": "${sourceFileMapObj}"
+   },
+   "testMate.cpp.test.advancedExecutables": [
+      {
+         "pattern": "build/**/*promise_test.exe",
+         "cwd": "${workspaceFolder}",
+         "catch2": {
+            "testGrouping": {
+               "groupByExecutable": {
+                  "label": "${filename}",
+                  "description": "${relDirpath}",
+                  "groupByTags": {
+                     "tags": [
+                        ["CVPromise"],
+                        ["StatePromise"],
+                        ["Pool"],
+                        ["Resolver"],
+                        ["MessageQueue"],
+                        ["Promise"]
+                     ],
+                     "label": "${tags}",
+                     "groupUngroupedTo": "Other",
+                     "groupByTags": {
+                        "tags": [
+                           ["Core"],
+                           ["Chains"],
+                           ["Branches"],
+                           ["DeepBranches"],
+                           ["RValue"]
+                        ],
+                        "label": "${tags}",
+                        "groupUngroupedTo": "Misc"
+                     }
+                  }
+               }
+            }
+         }
+      }
+   ]
 }

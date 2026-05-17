@@ -2,7 +2,7 @@
 
 using namespace std::chrono_literals;
 
-TEST_CASE("CVPromise notifies, rejects, and destructor behavior", "[promise]") {
+TEST_CASE("CVPromise notifies, rejects, and destructor behavior", "[CVPromise]") {
    CVPromise cv;
 
    auto initial = cv.Wait();
@@ -44,7 +44,7 @@ TEST_CASE("CVPromise notifies, rejects, and destructor behavior", "[promise]") {
    REQUIRE(end_caught);
 }
 
-TEST_CASE("StatePromise tracks ready, done, and reject transitions", "[promise]") {
+TEST_CASE("StatePromise tracks ready, done, and reject transitions", "[StatePromise]") {
    StatePromise state;
 
    auto wait_any   = state.Wait();
@@ -104,7 +104,7 @@ TEST_CASE("StatePromise tracks ready, done, and reject transitions", "[promise]"
    REQUIRE(end_caught_state);
 }
 
-TEST_CASE("MessageQueue dispatch runs work and resolves on queue thread", "[promise]") {
+TEST_CASE("MessageQueue dispatch runs work and resolves on queue thread", "[MessageQueue]") {
    promise::MessageQueue queue{"promise-test"};
    std::atomic<bool>     ran_on_queue_thread{false};
 
@@ -130,7 +130,7 @@ TEST_CASE("MessageQueue dispatch runs work and resolves on queue thread", "[prom
    queue.Stop();
 }
 
-TEST_CASE("ToPointer exposes type-erased awaiting", "[promise]") {
+TEST_CASE("ToPointer exposes type-erased awaiting", "[Promise]") {
    auto pointer = WPromise{[]() -> Promise<void> { co_return; }}.ToPointer();
 
    auto waiter = WPromise{[pointer]() -> Promise<int> {
@@ -144,7 +144,7 @@ TEST_CASE("ToPointer exposes type-erased awaiting", "[promise]") {
    REQUIRE(waiter.Value() == 1);
 }
 
-TEST_CASE("Pending Then registration updates awaiter counters", "[promise]") {
+TEST_CASE("Pending Then registration updates awaiter counters", "[Promise]") {
    auto [source, resolve, reject] = promise::Create<int>();
 
    REQUIRE(source.Awaiters() == 0);
@@ -164,7 +164,7 @@ TEST_CASE("Pending Then registration updates awaiter counters", "[promise]") {
    REQUIRE(source.Awaiters() == 0);
 }
 
-TEST_CASE("Pending Catch registration recovers once rejected", "[promise]") {
+TEST_CASE("Pending Catch registration recovers once rejected", "[Promise]") {
    auto [source, resolve, reject] = promise::Create<int>();
 
    auto recovered = source.Catch([](TestError const& exception) {
@@ -182,7 +182,7 @@ TEST_CASE("Pending Catch registration recovers once rejected", "[promise]") {
    REQUIRE(recovered.Value() == 42);
 }
 
-TEST_CASE("MakePromise supports resolver-first synchronous callables", "[promise]") {
+TEST_CASE("MakePromise supports resolver-first synchronous callables", "[Resolver]") {
    auto resolved = MakePromise([](Resolve<int> const& resolve) { REQUIRE(resolve(55)); });
 
    auto rejected = MakePromise([](Resolve<int> const&, Reject const& reject) {
@@ -196,7 +196,7 @@ TEST_CASE("MakePromise supports resolver-first synchronous callables", "[promise
    RequireException<TestError>(rejected.Exception());
 }
 
-TEST_CASE("StatePromise reset restores pending transitions", "[promise]") {
+TEST_CASE("StatePromise reset restores pending transitions", "[StatePromise]") {
    WPromise flow{[]() -> Promise<void> {
       StatePromise state;
 
@@ -247,7 +247,7 @@ TEST_CASE("StatePromise reset restores pending transitions", "[promise]") {
    REQUIRE(flow.Resolved());
 }
 
-TEST_CASE("CVPromise conversion operators expose updated state", "[promise]") {
+TEST_CASE("CVPromise conversion operators expose updated state", "[CVPromise]") {
    CVPromise cv;
 
    REQUIRE_FALSE(cv.Resolved());
@@ -267,7 +267,7 @@ TEST_CASE("CVPromise conversion operators expose updated state", "[promise]") {
    RequireException<TestError>(wait_via_conversion.Exception());
 }
 
-TEST_CASE("Pool and MessageQueue reject dispatch after stop", "[promise]") {
+TEST_CASE("Pool and MessageQueue reject dispatch after stop", "[Pool][MessageQueue]") {
    promise::Pool<2>      pool{"promise-pool-test"};
    promise::MessageQueue queue{"promise-queue-stopped"};
 
@@ -297,7 +297,7 @@ TEST_CASE("Pool and MessageQueue reject dispatch after stop", "[promise]") {
    REQUIRE(ensure_after_stop.Rejected());
 }
 
-TEST_CASE("Ensure co_await verifies thread ID consistency in MessageQueue", "[messagequeue]") {
+TEST_CASE("Ensure co_await verifies thread ID consistency in MessageQueue", "[MessageQueue]") {
    promise::MessageQueue queue{"promise-queue-ensure"};
 
    WPromise promise{[&]() -> Promise<void> {
