@@ -61,6 +61,8 @@ Proxy<OBJECT, OBJECT_PUBLIC>::operator()(std::function<T(OBJECT_PUBLIC&)>&& call
         } else {
            MakeReject<std::runtime_error>(reject, "Queue is not running");
         }
+
+        co_return;
      }
    );
 }

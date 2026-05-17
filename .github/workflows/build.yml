@@ -57,6 +57,7 @@ jobs:
             --exclude 'build/' \
             --gcov-executable gcov-14 \
             --gcov-ignore-errors=all \
+            --sonarqube-metric line \
             --sonarqube coverage/sonar-coverage.xml
 
       - name: Upload coverage artifact

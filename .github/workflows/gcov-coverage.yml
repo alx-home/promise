@@ -1,0 +1,80 @@
+name: Gcov Coverage
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gcov-coverage:
+    name: Build tests and produce gcov files
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-14 g++-14 gcovr
+
+      - name: Configure coverage build
+        run: >-
+          cmake
+          -S .
+          -B build
+          -G Ninja
+          -DCMAKE_C_COMPILER=gcc-14
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DCMAKE_BUILD_TYPE=Debug
+          -DPROMISE_BUILD_TESTS=ON
+          -DCMAKE_CXX_FLAGS="-O0 --coverage -fprofile-arcs -ftest-coverage"
+          -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+          -DCMAKE_SHARED_LINKER_FLAGS="--coverage"
+
+      - name: Build tests
+        run: cmake --build build --target promise_test --config Debug
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Generate raw gcov files
+        run: |
+          mkdir -p coverage/gcov
+          shopt -s globstar nullglob
+          for gcda in build/**/*.gcda; do
+            obj_dir="$(dirname "$gcda")"
+            base="$(basename "$gcda")"
+            (
+              cd "$obj_dir"
+              gcov-14 -b -c "$base" >/dev/null 2>&1 || true
+            )
+          done
+          find build -name '*.gcov' -print0 | while IFS= read -r -d '' file; do
+            cp "$file" coverage/gcov/
+          done
+          test -n "$(ls -A coverage/gcov)"
+
+      - name: Generate SonarQube XML from the same run
+        run: |
+          gcovr \
+            --root . \
+            --object-directory build \
+            --exclude 'build/' \
+            --gcov-executable gcov-14 \
+            --gcov-ignore-errors=all \
+            --sonarqube-metric line \
+            --sonarqube coverage/sonar-coverage.xml \
+            --html --html-details -o coverage/coverage.html \
+            --xml -o coverage/coverage.xml
+
+      - name: Upload gcov artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-gcov-files
+          path: coverage/gcov/
+
+      - name: Upload Sonar coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: promise-sonarqube-coverage
+          path: coverage/*
